@@ -97,4 +97,23 @@ describe("Discord Adapters", () => {
       d: { guild_id: "111", channel_id: "222", self_deaf: true, self_mute: false },
     });
   });
+
+  it("DaveyAdapter should process raw packets and build DAVE compatible voice state payload", async () => {
+    const { DaveyAdapter } = await import("./DaveyAdapter.ts");
+    const kumo = new YuKumo({ nodes: [] });
+    const voiceServerSpy = vi.spyOn(kumo, "handleVoiceServerUpdate");
+    const adapter = new DaveyAdapter(kumo, { enableDave: true });
+
+    adapter.handleRawPacket({
+      t: "VOICE_SERVER_UPDATE",
+      d: { guild_id: "333", token: "tok_dave", endpoint: "ep_dave" },
+    });
+    expect(voiceServerSpy).toHaveBeenCalledWith("333", { token: "tok_dave", endpoint: "ep_dave" });
+
+    const payload = adapter.buildVoiceStatePayload("333", "444");
+    expect(payload).toEqual({
+      op: 4,
+      d: { guild_id: "333", channel_id: "444", self_deaf: true, self_mute: false },
+    });
+  });
 });
