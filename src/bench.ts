@@ -4,7 +4,7 @@
  *
  * Run: bun run src/bench.ts
  */
-import { YuKumo } from "./YuKumo.ts";
+import { YuKumo } from "./Kumo.ts";
 import { Queue } from "./queue/Queue.ts";
 import { EventDispatcher } from "./ws/EventDispatcher.ts";
 import type { TrackData } from "./types/protocol.ts";
@@ -31,12 +31,12 @@ function makeTrack(id: number): TrackData {
 
 async function benchmarkStartup(): Promise<void> {
   const start = performance.now();
-  const YuKumo = new YuKumo({
+  const client = new YuKumo({
     nodes: [{ host: "localhost", port: 2333, password: "test" }],
   });
   const elapsed = performance.now() - start;
   console.log(`  YuKumo instance creation: ${elapsed.toFixed(2)}ms`);
-  await YuKumo.destroy();
+  await client.destroy();
 }
 
 async function benchmarkQueueOps(count: number): Promise<void> {

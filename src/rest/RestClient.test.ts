@@ -27,7 +27,7 @@ function mockResponse(status: number, body: unknown, statusText?: string) {
 describe("RestClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    globalThis.fetch = mockFetch;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
   });
 
   afterAll(() => {
