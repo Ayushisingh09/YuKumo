@@ -2,11 +2,36 @@
 
 High-Performance, Framework-Agnostic Lavalink v4 Client for JavaScript and TypeScript.
 
-[![npm version](https://img.shields.io/npm/v/yukumo?color=0052cc&label=npm)](https://www.npmjs.com/package/yukumo)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Lavalink v4](https://img.shields.io/badge/Lavalink-v4-1DB954)](https://lavalink.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Documentation](https://img.shields.io/badge/Docs-yukumo.vercel.app-000000)](https://yukumo.vercel.app)
+[
+
+![npm version](https://img.shields.io/npm/v/yukumo?color=0052cc&label=npm)
+
+](https://www.npmjs.com/package/yukumo)
+[
+
+![npm downloads](https://img.shields.io/npm/dt/yukumo?color=success&label=downloads)
+
+](https://www.npmjs.com/package/yukumo)
+[
+
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+
+](LICENSE)
+[
+
+![Lavalink v4](https://img.shields.io/badge/Lavalink-v4-1DB954)
+
+](https://lavalink.dev/)
+[
+
+![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
+
+](https://www.typescriptlang.org/)
+[
+
+![Documentation](https://img.shields.io/badge/Docs-yukumo.vercel.app-000000)
+
+](https://yukumo.vercel.app)
 
 ---
 
