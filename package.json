@@ -1,21 +1,28 @@
 {
-  "name": "YuKumo",
-  "version": "0.0.1",
-  "description": "A modern, lightweight, production-ready Lavalink v4 client for TypeScript",
+  "name": "yukumo",
+  "version": "1.0.0",
+  "description": "High-performance, framework-agnostic Lavalink v4 client for JavaScript and TypeScript",
   "keywords": [
     "lavalink",
     "lavalink-client",
+    "lavalink-v4",
     "music",
     "discord",
     "voice",
-    "lavalink-v4"
+    "audio",
+    "yukumo"
   ],
-  "homepage": "https://github.com/titanxdevz/Kumo#readme",
+  "homepage": "https://yukumo.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/titanxdevz/Yukumo.git"
+  },
   "bugs": {
-    "url": "https://github.com/titanxdevz/Kumo/issues"
+    "url": "https://github.com/titanxdevz/Yukumo/issues"
   },
   "license": "MIT",
-  "author": "YuKumo Contributors",
+  "author": "Yukumo Contributors",
+
   "type": "module",
   "exports": {
     ".": {
@@ -68,7 +75,7 @@
   },
   "packageManager": "bun@1.3.14",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }
+

@@ -18,8 +18,8 @@ Please be respectful, friendly, and inclusive in all interactions across issues,
 
 ### 1. Fork and Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/YoKumo.git
-cd YoKumo/"Yukumo wrapper"
+git clone https://github.com/YOUR_USERNAME/Yukumo.git
+cd Yukumo/"Yukumo wrapper"
 ```
 
 ### 2. Install Dependencies
@@ -82,7 +82,7 @@ When creating new features or fixing bugs:
    git push origin feat/my-amazing-feature
    ```
 4. **Open a Pull Request**:
-   Navigate to [titanxdevz/YoKumo](https://github.com/titanxdevz/YoKumo) and submit your PR with a summary of changes and testing evidence.
+   Navigate to [titanxdevz/Yukumo](https://github.com/titanxdevz/Yukumo) and submit your PR with a summary of changes and testing evidence.
 
 ---
 

@@ -8,7 +8,7 @@ Are you using **Yukumo** in your Discord bot, open-source project, or music appl
 
 | Bot / Project Name | Description | Framework | Links |
 |---|---|---|---|
-| **Yukumo Reference Bot** | Official feature-packed music bot demonstrating slash commands, audio filters, autoplay, and node failover. | `discord.js` v14 | [Source Code](https://github.com/titanxdevz/YoKumo/tree/master/discord-bot) |
+| **Yukumo Reference Bot** | Official feature-packed music bot demonstrating slash commands, audio filters, autoplay, and node failover. | `discord.js` v14 | [Source Code](https://github.com/titanxdevz/Yukumo/tree/master/discord-bot) |
 
 ---
 
