@@ -1,8 +1,8 @@
 <div align="center">
 
-<h1> YuKumo </h1>
+<h1>YuKumo</h1>
 
-<p><i>High-Performance, Framework-Agnostic Lavalink v4 Client for JavaScript and TypeScript</i></p>
+<p><i>A high-performance, framework-agnostic Lavalink v4 client for JavaScript and TypeScript.</i></p>
 
 [![npm version](https://img.shields.io/npm/v/yukumo?color=F472B6&label=npm&style=for-the-badge&logo=npm&logoColor=white)](https://www.npmjs.com/package/yukumo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-8B5CF6?style=for-the-badge)](LICENSE)
@@ -12,46 +12,60 @@
 
 </div>
 
----
+<br />
 
-## Overview
+YuKumo is a zero-dependency client library built to interface seamlessly with **Lavalink v4** audio servers. It treats JavaScript (CommonJS & ESM) and TypeScript as equal first-class targets — JSDoc-powered autocomplete for JS consumers, and strict, fully-generic typing with zero `any` for TS projects.
 
-Yukumo is an enterprise-grade, lightweight, zero-dependency client library designed to interface seamlessly with Lavalink v4 audio servers. It treats JavaScript (CommonJS & ESM) and TypeScript as equal first-class targets, providing JSDoc-powered editor autocomplete for JavaScript consumers and strict, generic-capable typing with zero `any` declarations for TypeScript projects.
+Built for production: multi-node load balancing, automatic failover, distributed state via Redis, and OpenMetrics observability out of the box.
 
-Documentation: [https://yukumo.vercel.app](https://yukumo.vercel.app)
-
----
-
-## Architectural Comparison
-
-| Architectural Capability | Yukumo | Hoshimi | Kazagumo | Poru | lavalink-client |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Full Lavalink v4 REST + WebSocket Protocol | Yes | Partial | Partial | Partial | Yes |
-| Equal First-Class JS & TS Parity | Yes | No | No | No | TypeScript-First |
-| Native Dual Build (CommonJS + ESM) | Yes | Partial | Partial | Partial | Partial |
-| REST Response Caching & 429 Retry Backoff | Yes | No | No | No | No |
-| Multi-Node Load Balancing (8 Strategies) | Yes | No | No | No | Partial |
-| Automatic Node Failover & Migration | Yes | No | No | No | Partial |
-| Native Framework Adapters (`discord.js`, `Eris`, `Seyfert`, `Oceanic`, `Discordeno`) | Yes | No | No | No | No |
-| Audio Filter DSP Presets (`BassBoost`, `Nightcore`, `8D`...) | Yes | No | No | No | Partial |
-| Distributed State Architecture (`RedisStorage`) | Yes | No | No | No | No |
-| OpenMetrics / Prometheus Exporter | Yes | No | No | No | No |
+**📖 Full documentation → [yukumo.vercel.app](https://yukumo.vercel.app)**
 
 ---
 
-## Technical Features
+## Table of Contents
 
-- **Protocol Coverage**: Native support for Lavalink v4 REST API endpoints (search, decode, sessions, routeplanner unmark/status, plugins) and WebSocket events (player updates, stats, event dispatching).
-- **LavaSearch Multi-Category Search**: Integrated `lavaSearch` method supporting concurrent queries across tracks, albums, artists, playlists, and text sources.
-- **Node Management & Load Balancing**: 8 node selection algorithms: `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`.
-- **Zero-Downtime Auto-Failover**: Automatic player migration to healthy nodes in the event of WebSocket disconnection or server fault.
-- **REST Caching & Backoff**: Built-in TTL response caching for track search/decoding requests, accompanied by HTTP 429 `Retry-After` header parsing and exponential retry backoff.
-- **Queue System & Pagination**: Supports repeat modes (`off`, `track`, `queue`), play history tracking, array shuffling, priority track injection (`priorityEnqueue`), state serialization (`export()` / `import()`), and pagination (`getPage`).
-- **Audio DSP Filters & Presets**: Complete DSP filter chain control (Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass) plus instant audio presets (`setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, `setKaraoke()`).
-- **Framework Adapters**: First-class gateway integration adapters for `discord.js` v14 (`DiscordJSAdapter`), `Eris` (`ErisAdapter`), `Seyfert` (`SeyfertAdapter`), `Oceanic.js` (`OceanicAdapter`), `Discordeno` (`DiscordenoAdapter`), and raw gateway packets (`RawGatewayAdapter`).
-- **Plugins**: Pre-built wrappers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock segment filtering, and FloweryTTS text-to-speech.
-- **Observability & Logging**: Integrated `PrometheusExporter` generating OpenMetrics format text output for Grafana dashboards, along with a pluggable `Logger` interface.
-- **Distributed State**: Drop-in `RedisStorage` adapter for multi-process and sharded architecture deployments.
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage Examples](#usage-examples)
+- [Plugins](#plugins)
+- [Observability](#observability)
+- [Reference Bots](#reference-bots)
+- [Community](#community--contributing)
+- [License](#license)
+
+---
+
+## Features
+
+**Core Protocol**
+- Full coverage of the Lavalink v4 REST API (search, decode, sessions, route planner, plugins) and WebSocket event dispatch
+- `lavaSearch` support for concurrent multi-category queries — tracks, albums, artists, playlists, and text sources
+
+**Node Management**
+- 8 node-selection strategies: `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`
+- Zero-downtime automatic player migration on node disconnect or failure
+- Built-in REST response caching with TTL, plus HTTP 429 `Retry-After` parsing and exponential backoff
+
+**Queueing**
+- Repeat modes (`off`, `track`, `queue`), play history, shuffle, and priority track injection via `priorityEnqueue`
+- Queue state serialization (`export()` / `import()`) and pagination (`getPage`)
+
+**Audio & Filters**
+- Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass
+- One-line presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, `setKaraoke()`
+
+**Framework Adapters**
+- First-class gateway adapters for `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, and `Discordeno`
+- `RawGatewayAdapter` for custom or raw gateway integrations
+
+**Plugins**
+- Pre-built wrappers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock segment filtering, and FloweryTTS
+
+**Observability & Scaling**
+- `PrometheusExporter` for OpenMetrics-format output, ready for Grafana dashboards
+- Pluggable `Logger` interface
+- Drop-in `RedisStorage` adapter for sharded and multi-process deployments
 
 ---
 
@@ -59,15 +73,19 @@ Documentation: [https://yukumo.vercel.app](https://yukumo.vercel.app)
 
 ```bash
 npm install yukumo
-# or
+```
+
+```bash
 bun add yukumo
+```
+
+```bash
+pnpm add yukumo
 ```
 
 ---
 
-## Code Examples
-
-### JavaScript (CommonJS)
+## Quick Start
 
 ```js
 const { Client, GatewayIntentBits } = require("discord.js");
@@ -90,13 +108,24 @@ const yukumo = new YuKumo({
 const adapter = new DiscordJSAdapter(client, yukumo);
 
 yukumo.on("nodeReady", (nodeId) => console.log(`[Yukumo] Node connected: ${nodeId}`));
-yukumo.on("trackStart", (guildId, track) => console.log(`Playing: ${track.info.title}`));
+yukumo.on("trackStart", (guildId, track) => console.log(`Now playing: ${track.info.title}`));
 
 client.once("ready", async () => {
   yukumo.setUserId(client.user.id);
   await yukumo.init();
 });
 
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+## Usage Examples
+
+<details>
+<summary><b>CommonJS — full play command</b></summary>
+
+```js
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.content.startsWith("!play ")) return;
 
@@ -117,11 +146,12 @@ client.on("messageCreate", async (message) => {
   await yukumo.play(message.guild.id, res.tracks[0]);
   message.reply(`Playing: ${res.tracks[0].info.title}`);
 });
-
-client.login(process.env.DISCORD_TOKEN);
 ```
 
-### JavaScript (ESM)
+</details>
+
+<details>
+<summary><b>ESM</b></summary>
 
 ```js
 import { Client, GatewayIntentBits } from "discord.js";
@@ -151,7 +181,10 @@ client.once("ready", async () => {
 client.login(process.env.DISCORD_TOKEN);
 ```
 
-### TypeScript
+</details>
+
+<details>
+<summary><b>TypeScript — typed play command with filters</b></summary>
 
 ```ts
 import { Client, GatewayIntentBits, Message } from "discord.js";
@@ -181,52 +214,92 @@ client.once("ready", async () => {
 
 client.on("messageCreate", async (message: Message) => {
   if (message.author.bot || !message.guild || !message.member?.voice.channel) return;
+  if (!message.content.startsWith("!play ")) return;
 
-  if (message.content.startsWith("!play ")) {
-    const query = message.content.slice(6).trim();
-    const searchRes: SearchResult = await yukumo.search(query);
+  const query = message.content.slice(6).trim();
+  const searchRes: SearchResult = await yukumo.search(query);
 
-    if (searchRes.tracks.length === 0) {
-      await message.reply("No tracks found.");
-      return;
-    }
-
-    const track: TrackData = searchRes.tracks[0];
-    const player = await yukumo.createPlayer({
-      guildId: message.guild.id,
-      voiceChannelId: message.member.voice.channel.id,
-      textChannelId: message.channel.id,
-    });
-
-    adapter.sendVoiceStateUpdate(message.guild.id, message.member.voice.channel.id);
-    await yukumo.play(message.guild.id, track);
-    player.filters.setBassBoost("medium");
-    await message.reply(`Now playing: ${track.info.title}`);
+  if (searchRes.tracks.length === 0) {
+    await message.reply("No tracks found.");
+    return;
   }
+
+  const track: TrackData = searchRes.tracks[0];
+  const player = await yukumo.createPlayer({
+    guildId: message.guild.id,
+    voiceChannelId: message.member.voice.channel.id,
+    textChannelId: message.channel.id,
+  });
+
+  adapter.sendVoiceStateUpdate(message.guild.id, message.member.voice.channel.id);
+  await yukumo.play(message.guild.id, track);
+  player.filters.setBassBoost("medium");
+
+  await message.reply(`Now playing: ${track.info.title}`);
 });
 
 client.login(process.env.DISCORD_TOKEN);
 ```
 
+</details>
+
 ---
 
-## Reference Examples
+## Plugins
 
-Functional reference implementations are located in the `examples/` directory:
-- [CommonJS JavaScript Bot](examples/js-cjs/bot.js)
-- [ESM JavaScript Bot](examples/js-esm/bot.js)
-- [TypeScript Bot](examples/ts/bot.ts)
+| Plugin | Description |
+|---|---|
+| **LavaSrc** | Spotify, Apple Music, Deezer, and Yandex Music resolution |
+| **SponsorBlock** | Automatic segment filtering (intros, sponsors, outros) |
+| **FloweryTTS** | Text-to-speech track generation |
+
+```js
+const { YuKumo, LavaSrcPlugin, SponsorBlockPlugin } = require("yukumo");
+
+const yukumo = new YuKumo({
+  nodes: [{ host: "localhost", port: 2333, password: "youshallnotpass" }],
+  plugins: [new LavaSrcPlugin(), new SponsorBlockPlugin()],
+});
+```
+
+---
+
+## Observability
+
+Export live node and player metrics in OpenMetrics format for Prometheus / Grafana:
+
+```js
+const { PrometheusExporter } = require("yukumo");
+
+const exporter = new PrometheusExporter(yukumo);
+exporter.listen(9090); // scrape at :9090/metrics
+```
+
+Bring your own logger via the pluggable `Logger` interface, or scale horizontally across processes with the built-in `RedisStorage` adapter.
+
+---
+
+## Reference Bots
+
+Complete, runnable bot implementations live in [`examples/`](examples):
+
+| Bot | Description |
+|---|---|
+| [`examples/js-cjs/bot.js`](examples/js-cjs/bot.js) | CommonJS JavaScript |
+| [`examples/js-esm/bot.js`](examples/js-esm/bot.js) | ESM JavaScript |
+| [`examples/ts/bot.ts`](examples/ts/bot.ts) | TypeScript |
 
 ---
 
 ## Community & Contributing
 
-- Showcase: See [SHOWCASE.md](SHOWCASE.md) to register projects utilizing Yukumo.
-- Contributing: See [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and contribution guidelines.
-- Documentation: [https://yukumo.vercel.app](https://yukumo.vercel.app)
+- ⭐ **Showcase** — using YuKumo in production? Add your project to [SHOWCASE.md](SHOWCASE.md)
+- 🤝 **Contributing** — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines
+- 🛡️ **Security** — see [SECURITY.md](SECURITY.md) to report vulnerabilities
+- 📖 **Docs** — [yukumo.vercel.app](https://yukumo.vercel.app)
 
 ---
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+Distributed under the [MIT License](LICENSE).
