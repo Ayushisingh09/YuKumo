@@ -372,4 +372,48 @@ describe("Queue", () => {
       expect(queue.currentTrack).toBe("track-2");
     });
   });
+
+  describe("priorityEnqueue and serialization", () => {
+    it("should insert track next with priorityEnqueue", () => {
+      const queue = new Queue<string>();
+      queue.enqueue("track-1");
+      queue.enqueue("track-2");
+      queue.start(); // current is track-1 at index 0
+
+      queue.priorityEnqueue("priority-track");
+      expect(queue.tracksList).toEqual(["track-1", "priority-track", "track-2"]);
+    });
+
+    it("should export and import queue state", () => {
+      const queue = new Queue<string>();
+      queue.enqueue("track-1");
+      queue.enqueue("track-2");
+      queue.start();
+      queue.setRepeatMode("queue");
+
+      const exported = queue.export();
+      expect(exported.tracks).toEqual(["track-1", "track-2"]);
+      expect(exported.currentIndex).toBe(0);
+      expect(exported.repeatMode).toBe("queue");
+
+      const newQueue = new Queue<string>();
+      newQueue.import(exported);
+      expect(newQueue.tracksList).toEqual(["track-1", "track-2"]);
+      expect(newQueue.currentTrack).toBe("track-1");
+      expect(newQueue.repeatMode).toBe("queue");
+    });
+
+    it("should clear history", () => {
+      const queue = new Queue<string>();
+      queue.enqueue("track-1");
+      queue.enqueue("track-2");
+      queue.start();
+      queue.next();
+      expect(queue.historyList.length).toBeGreaterThan(0);
+
+      queue.clearHistory();
+      expect(queue.historyList.length).toBe(0);
+    });
+  });
 });
+

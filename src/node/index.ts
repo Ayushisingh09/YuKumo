@@ -4,7 +4,12 @@ export { NodeManager } from "./NodeManager.ts";
 export {
   LeastUsedSelector,
   LeastPenaltySelector,
+  CpuUsageSelector,
+  MemoryUsageSelector,
+  LowestPingSelector,
   RoundRobinSelector,
   RandomSelector,
+  CustomSelector,
 } from "./NodeSelector.ts";
 export type { NodeSelector } from "./NodeSelector.ts";
+

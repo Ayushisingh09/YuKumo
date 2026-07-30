@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   LeastUsedSelector,
   LeastPenaltySelector,
+  CpuUsageSelector,
+  MemoryUsageSelector,
+  LowestPingSelector,
   RoundRobinSelector,
   RandomSelector,
+  CustomSelector,
 } from "./NodeSelector.ts";
 import { Node } from "./Node.ts";
 import type { NodeConfig } from "../types/internal.ts";
@@ -77,6 +81,74 @@ describe("NodeSelector", () => {
     });
   });
 
+  describe("CpuUsageSelector", () => {
+    it("should pick node with lowest CPU load", () => {
+      const selector = new CpuUsageSelector();
+      const node1 = createNode({ name: "node-1" });
+      const node2 = createNode({ name: "node-2" });
+      Object.defineProperty(node1, "state", { value: "connected" });
+      Object.defineProperty(node2, "state", { value: "connected" });
+
+      Object.defineProperty(node1, "stats", {
+        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 0, used: 0, allocated: 0, reservable: 0 }, cpu: { cores: 4, systemLoad: 0.5, lavalinkLoad: 0.8 }, frameStats: null },
+      });
+      Object.defineProperty(node2, "stats", {
+        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 0, used: 0, allocated: 0, reservable: 0 }, cpu: { cores: 4, systemLoad: 0.2, lavalinkLoad: 0.1 }, frameStats: null },
+      });
+
+      const result = selector.pick([node1, node2], "guild-1");
+      expect(result).toBe(node2);
+    });
+  });
+
+  describe("MemoryUsageSelector", () => {
+    it("should pick node with lowest memory usage", () => {
+      const selector = new MemoryUsageSelector();
+      const node1 = createNode({ name: "node-1" });
+      const node2 = createNode({ name: "node-2" });
+      Object.defineProperty(node1, "state", { value: "connected" });
+      Object.defineProperty(node2, "state", { value: "connected" });
+
+      Object.defineProperty(node1, "stats", {
+        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 100, used: 800, allocated: 1000, reservable: 1000 }, cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 }, frameStats: null },
+      });
+      Object.defineProperty(node2, "stats", {
+        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 800, used: 200, allocated: 1000, reservable: 1000 }, cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 }, frameStats: null },
+      });
+
+      const result = selector.pick([node1, node2], "guild-1");
+      expect(result).toBe(node2);
+    });
+  });
+
+  describe("LowestPingSelector", () => {
+    it("should pick node with lowest ping", () => {
+      const selector = new LowestPingSelector();
+      const node1 = createNode({ name: "node-1" });
+      const node2 = createNode({ name: "node-2" });
+      Object.defineProperty(node1, "state", { value: "connected" });
+      Object.defineProperty(node2, "state", { value: "connected" });
+
+      Object.defineProperty(node1, "ping", { value: 120 });
+      Object.defineProperty(node2, "ping", { value: 15 });
+
+      const result = selector.pick([node1, node2], "guild-1");
+      expect(result).toBe(node2);
+    });
+  });
+
+  describe("CustomSelector", () => {
+    it("should execute custom picker function", () => {
+      const node1 = createNode({ name: "node-1" });
+      const node2 = createNode({ name: "node-2" });
+      Object.defineProperty(node1, "state", { value: "connected" });
+      Object.defineProperty(node2, "state", { value: "connected" });
+
+      const selector = new CustomSelector((nodes) => nodes.find((n) => n.id === "node-2") ?? null);
+      expect(selector.pick([node1, node2], "guild-1")).toBe(node2);
+    });
+  });
+
   describe("RoundRobinSelector", () => {
     it("should cycle through nodes", () => {
       const selector = new RoundRobinSelector();
@@ -124,3 +196,4 @@ describe("NodeSelector", () => {
     });
   });
 });
+
