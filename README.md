@@ -2,11 +2,7 @@
 
 High-Performance, Framework-Agnostic Lavalink v4 Client for JavaScript and TypeScript.
 
-[
-
-![npm version](https://img.shields.io/npm/v/yukumo?color=0052cc&label=npm)
-
-](https://www.npmjs.com/package/yukumo)
+[![npm version](https://img.shields.io/npm/v/yukumo?color=0052cc&label=npm)](https://www.npmjs.com/package/yukumo)
 [
 
 ![npm downloads](https://img.shields.io/npm/dt/yukumo?color=success&label=downloads)
