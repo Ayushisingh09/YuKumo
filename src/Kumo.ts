@@ -95,6 +95,10 @@ function buildIdentifier(query: string, source?: string, defaultSearchSource: st
   return `${defaultPrefix}:${query}`;
 }
 
+/**
+ * Main Yukumo Lavalink Client. Coordinates Node pool load balancing, Player lifecycle,
+ * Queue management, Filter chains, Plugins, and Voice state handling.
+ */
 export class YuKumo {
   public readonly nodes: NodeManager;
   public readonly players: PlayerManager;
@@ -119,16 +123,19 @@ export class YuKumo {
     this.registerPlugins(options.plugins);
   }
 
+  /** Sets the Discord Bot User ID for node handshakes */
   public setUserId(userId: string): void {
     this._userId = userId;
     this.nodes.setUserId(userId);
   }
 
+  /** Connects to all configured Lavalink nodes and starts plugins */
   public async init(): Promise<void> {
     await this.nodes.connectAll();
     await this.plugins.startAll();
   }
 
+  /** Destroys all players, closes node WS connections, and cleans up event listeners */
   public async destroy(): Promise<void> {
     await this.players.destroyAll();
     await this.nodes.destroyAll();
@@ -139,6 +146,11 @@ export class YuKumo {
     this.events.removeAllListeners();
   }
 
+  /**
+   * Searches for tracks across YouTube, Spotify, SoundCloud, or custom source managers.
+   * @param queryOrOptions Search query string or options object
+   * @param source Optional search source prefix (e.g. "youtube", "spotify")
+   */
   public async search(queryOrOptions: string | SearchOptions, source?: string): Promise<SearchResult> {
     const resolved: SearchOptions =
       typeof queryOrOptions === "string" ? { query: queryOrOptions, source } : queryOrOptions;
@@ -165,12 +177,13 @@ export class YuKumo {
       }
 
       return afterResult;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       return {
         loadType: "error",
         tracks: [],
         exception: {
-          message: err?.message ?? "Failed to connect to Lavalink REST endpoint",
+          message: errorMsg || "Failed to connect to Lavalink REST endpoint",
           severity: "fault",
           cause: String(err),
         },
@@ -178,6 +191,10 @@ export class YuKumo {
     }
   }
 
+  /**
+   * Creates or gets a player for a guild.
+   * @param options Guild, channel IDs, and node options
+   */
   public async createPlayer(options: YuKumoPlayerCreateOptions): Promise<Player> {
     const existing = this.players.get(options.guildId);
     if (existing != null) return existing;
@@ -210,6 +227,7 @@ export class YuKumo {
     return player;
   }
 
+  /** Enqueues and starts track playback for a guild */
   public async play(guildId: string, track: TrackData): Promise<void> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
@@ -225,24 +243,28 @@ export class YuKumo {
     await this.plugins.runAfterPlay(guildId, hookResult);
   }
 
+  /** Pauses player playback */
   public async pause(guildId: string): Promise<void> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
     await player.pause();
   }
 
+  /** Resumes player playback */
   public async resume(guildId: string): Promise<void> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
     await player.resume();
   }
 
+  /** Stops player playback */
   public async stop(guildId: string): Promise<void> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
     await player.stop();
   }
 
+  /** Skips currently playing track and advances queue */
   public async skip(guildId: string): Promise<TrackData | null> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
@@ -259,12 +281,14 @@ export class YuKumo {
     return next;
   }
 
+  /** Sets player volume */
   public async setVolume(guildId: string, volume: number): Promise<void> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
     await player.setVolume(volume);
   }
 
+  /** Destroys player for a guild */
   public async destroyPlayer(guildId: string): Promise<boolean> {
     const shouldDestroy = await this.plugins.runBeforeDestroy(guildId);
     if (!shouldDestroy) return false;
@@ -277,6 +301,7 @@ export class YuKumo {
     return result;
   }
 
+  /** Processes raw Discord VOICE_STATE_UPDATE gateway event */
   public async handleVoiceStateUpdate(data: VoiceStateUpdate): Promise<void> {
     this.voice.handleVoiceStateUpdate(data);
 
@@ -293,6 +318,7 @@ export class YuKumo {
     player.updateVoiceState({ sessionId: data.sessionId, channelId: data.channelId });
   }
 
+  /** Processes raw Discord VOICE_SERVER_UPDATE gateway event */
   public async handleVoiceServerUpdate(guildId: string, data: VoiceServerUpdate): Promise<void> {
     this.voice.handleVoiceServerUpdate(guildId, data);
 
@@ -302,26 +328,32 @@ export class YuKumo {
     player.updateVoiceState({ token: data.token, endpoint: data.endpoint });
   }
 
+  /** Gets player for a guild */
   public getPlayer(guildId: string): Player | undefined {
     return this.players.get(guildId);
   }
 
+  /** Gets all active players */
   public getPlayers(): Player[] {
     return this.players.getAll();
   }
 
+  /** Checks if player exists for a guild */
   public hasPlayer(guildId: string): boolean {
     return this.players.has(guildId);
   }
 
+  /** Gets node by name or ID */
   public getNode(id: string): Node | undefined {
     return this.nodes.get(id);
   }
 
+  /** Gets all configured nodes */
   public getNodes(): Node[] {
     return this.nodes.getAll();
   }
 
+  /** Subscribes to global client events */
   public on<E extends EventName>(event: E, callback: EventCallback<E>): this {
     this.events.on(event, callback);
     return this;
@@ -337,12 +369,13 @@ export class YuKumo {
   private bindNodeEvents(node: Node): void {
     const ws = node.ws.eventDispatcher;
     ws.on("nodeReady", (nodeId: string) => this.events.emit("nodeReady", nodeId));
-    ws.on("nodeDisconnected", (nodeId: string, code: number, reason: string) =>
-      this.events.emit("nodeDisconnected", nodeId, code, reason)
-    );
+    ws.on("nodeDisconnected", (nodeId: string, code: number, reason: string) => {
+      this.events.emit("nodeDisconnected", nodeId, code, reason);
+      this.handleNodeFailover(nodeId);
+    });
     ws.on("nodeReconnected", (nodeId: string) => this.events.emit("nodeReconnected", nodeId));
     ws.on("nodeError", (nodeId: string, error: Error) => this.events.emit("nodeError", nodeId, error));
-    ws.on("stats", (nodeId: string, stats: any) => this.events.emit("stats", nodeId, stats));
+    ws.on("stats", (nodeId: string, stats: unknown) => this.events.emit("stats", nodeId, stats as never));
     ws.on("debug", (msg: string) => this.events.emit("debug", msg));
     ws.on("trackStart", (guildId: string, track: TrackData) => this.events.emit("trackStart", guildId, track));
     ws.on("trackEnd", (guildId: string, track: TrackData, reason: string) =>
@@ -357,6 +390,19 @@ export class YuKumo {
     ws.on("playerUpdate", (guildId: string, state: { time: number; position: number; connected: boolean; ping: number }) =>
       this.events.emit("playerUpdate", guildId, state)
     );
+  }
+
+  private handleNodeFailover(failedNodeId: string): void {
+    const affectedPlayers = this.players.getAll().filter((p) => p.node.id === failedNodeId);
+    for (const player of affectedPlayers) {
+      const replacementNode = this.nodes.pick(player.guildId);
+      if (replacementNode != null && replacementNode.id !== failedNodeId) {
+        player.setNode(replacementNode).catch(() => {
+          // failover migration error
+        });
+        this.events.emit("playerMove", player.guildId, failedNodeId, replacementNode.id);
+      }
+    }
   }
 
   private registerPlugins(
@@ -381,3 +427,4 @@ export class YuKumo {
     }
   }
 }
+

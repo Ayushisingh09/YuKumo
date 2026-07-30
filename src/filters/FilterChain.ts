@@ -13,34 +13,46 @@ import {
 } from "./Filters.ts";
 import type { FiltersObject } from "../types/protocol.ts";
 
+export type BassBoostLevel = "low" | "medium" | "high" | "extreme";
+
+/**
+ * Manages an active chain of Lavalink audio filters and provides preset shortcuts.
+ */
 export class FilterChain {
   private readonly filters: Map<string, Filter> = new Map();
 
+  /** Adds a filter instance to the active chain */
   public add(filter: Filter): this {
     this.filters.set(filter.name, filter);
     return this;
   }
 
+  /** Removes a filter by name from the chain */
   public remove(name: string): boolean {
     return this.filters.delete(name);
   }
 
+  /** Gets a filter instance by name from the chain */
   public get(name: string): Filter | undefined {
     return this.filters.get(name);
   }
 
+  /** Checks whether a filter exists in the chain */
   public has(name: string): boolean {
     return this.filters.has(name);
   }
 
+  /** Clears all applied filters from the chain */
   public clear(): void {
     this.filters.clear();
   }
 
+  /** Gets all active filter instances */
   public getAll(): Filter[] {
     return Array.from(this.filters.values());
   }
 
+  /** Converts active filters to Lavalink v4 REST payload structure */
   public toPayload(): FiltersObject {
     const payload: FiltersObject = {};
 
@@ -52,6 +64,7 @@ export class FilterChain {
     return payload;
   }
 
+  /** Applies a Lavalink filters object payload to populate internal filter states */
   public apply(payload: FiltersObject): void {
     this.clear();
 
@@ -96,6 +109,63 @@ export class FilterChain {
     }
   }
 
+  /** Applies a Bass Boost equalizer preset */
+  public setBassBoost(level: BassBoostLevel = "medium"): this {
+    const gains: Record<BassBoostLevel, number[]> = {
+      low: [0.1, 0.08, 0.05, 0.0, 0.0],
+      medium: [0.2, 0.15, 0.1, 0.05, 0.0],
+      high: [0.35, 0.25, 0.15, 0.05, 0.0],
+      extreme: [0.5, 0.4, 0.3, 0.15, 0.0],
+    };
+
+    const bandGains = gains[level];
+    const eq = new EqualizerFilter();
+    bandGains.forEach((gain, band) => {
+      eq.setBand(band, gain);
+    });
+
+    return this.add(eq);
+  }
+
+  /** Applies a Nightcore timescale preset (speed: 1.25, pitch: 1.25) */
+  public setNightcore(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("timescale");
+      return this;
+    }
+    return this.add(new TimescaleFilter({ speed: 1.25, pitch: 1.25, rate: 1.0 }));
+  }
+
+  /** Applies a Vaporwave timescale preset (speed: 0.85, pitch: 0.8) */
+  public setVaporwave(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("timescale");
+      return this;
+    }
+    return this.add(new TimescaleFilter({ speed: 0.85, pitch: 0.8, rate: 1.0 }));
+  }
+
+  /** Applies an 8D audio rotation preset (0.2 Hz panning) */
+  public set8D(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("rotation");
+      return this;
+    }
+    return this.add(new RotationFilter({ rotationHz: 0.2 }));
+  }
+
+  /** Applies a Karaoke filter preset */
+  public setKaraoke(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("karaoke");
+      return this;
+    }
+    return this.add(
+      new KaraokeFilter({ level: 1.0, monoLevel: 1.0, filterBand: 220, filterWidth: 100 }),
+    );
+  }
+
+  /** Clones this filter chain */
   public clone(): FilterChain {
     const chain = new FilterChain();
     for (const filter of this.filters.values()) {
@@ -104,3 +174,4 @@ export class FilterChain {
     return chain;
   }
 }
+

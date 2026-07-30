@@ -12,4 +12,6 @@ export * from "./player/index.ts";
 export * from "./storage/index.ts";
 export * from "./plugins/index.ts";
 export * from "./voice/index.ts";
+export * from "./adapters/index.ts";
 export * from "./Kumo.ts";
+

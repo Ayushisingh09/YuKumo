@@ -6,6 +6,9 @@ import type { EventName, EventCallback } from "../types/internal.ts";
 
 export type { NodeState };
 
+/**
+ * Calculated penalty score metrics for node load balancing.
+ */
 export interface PenaltyScore {
   total: number;
   playerPenalty: number;
@@ -14,6 +17,10 @@ export interface PenaltyScore {
   nullPenalty: number;
 }
 
+/**
+ * Represents a single Lavalink v4 node connection, providing WS event subscriptions,
+ * REST API client, and penalty score metrics.
+ */
 export class Node {
   public readonly config: NodeConfig;
   public readonly ws: WebSocketClient;
@@ -21,6 +28,7 @@ export class Node {
   private readonly events: EventDispatcher;
   private _state: NodeState = "disconnected";
   private _stats: NodeStats | null = null;
+  private _ping: number | null = null;
   private _penalties: PenaltyScore = {
     total: 0,
     playerPenalty: 0,
@@ -58,43 +66,69 @@ export class Node {
       this.updatePenalties();
     });
 
+    this.ws.eventDispatcher.on("nodeReady", () => {
+      if (this.ws.sessionId) {
+        this.rest.sessionId = this.ws.sessionId;
+      }
+    });
+
+    this.ws.eventDispatcher.on("playerUpdate", (_guildId: string, state: { ping?: number }) => {
+      if (state.ping != null && state.ping >= 0) {
+        this._ping = state.ping;
+      }
+    });
+
     this.ws.eventDispatcher.on("debug", (message: string) => {
       this.events.emit("debug", message);
     });
   }
 
+  /** Gets the node unique name or identifier */
   public get id(): string {
     return this.config.name ?? `${this.config.host}:${this.config.port}`;
   }
 
+  /** Sets the Discord bot User ID for WebSocket handshake */
   public setUserId(userId: string): void {
     this.ws.setUserId(userId);
   }
 
+  /** Gets the current connection state of the node */
   public get state(): NodeState {
     return this._state;
   }
 
+  /** Gets the latest node statistics */
   public get stats(): NodeStats | null {
     return this._stats;
   }
 
+  /** Gets the latest round-trip WebSocket ping in ms if available */
+  public get ping(): number | null {
+    return this._ping;
+  }
+
+  /** Gets the calculated penalty score */
   public get penalties(): PenaltyScore {
     return this._penalties;
   }
 
+  /** Gets the active player count on this node */
   public get playerCount(): number {
     return this._playerCount;
   }
 
+  /** Sets the active player count on this node */
   public set playerCount(count: number) {
     this._playerCount = count;
   }
 
+  /** Gets the event dispatcher for node level events */
   public get eventDispatcher(): EventDispatcher {
     return this.events;
   }
 
+  /** Subscribes to node events */
   public on<E extends EventName>(event: E, callback: EventCallback<E>): this {
     this.events.on(event, callback);
     return this;
@@ -123,6 +157,7 @@ export class Node {
     };
   }
 
+  /** Initiates WebSocket connection to the Lavalink node */
   public async connect(): Promise<void> {
     this._state = "connecting";
     try {
@@ -134,14 +169,17 @@ export class Node {
     }
   }
 
+  /** Closes the WebSocket connection */
   public async close(): Promise<void> {
     this._state = "disconnected";
     await this.ws.close();
   }
 
+  /** Destroys the node instance and cleans up event listeners */
   public destroy(): void {
     this._state = "destroyed";
     this.ws.destroy();
     this.events.removeAllListeners();
   }
 }
+
