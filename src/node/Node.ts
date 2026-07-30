@@ -88,6 +88,12 @@ export class Node {
     return this.config.name ?? `${this.config.host}:${this.config.port}`;
   }
 
+  /** Gets the node name */
+  public get name(): string {
+    return this.id;
+  }
+
+
   /** Sets the Discord bot User ID for WebSocket handshake */
   public setUserId(userId: string): void {
     this.ws.setUserId(userId);

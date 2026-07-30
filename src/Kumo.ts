@@ -19,7 +19,7 @@ import type {
   EventName,
   EventCallback,
 } from "./types/internal.ts";
-import type { TrackData, LoadResult } from "./types/protocol.ts";
+import type { TrackData, LoadResult, LavaSearchType, LavaSearchResult } from "./types/protocol.ts";
 
 export interface YuKumoPlayerCreateOptions {
   guildId: string;
@@ -190,6 +190,21 @@ export class YuKumo {
       };
     }
   }
+
+  /**
+   * Performs a multi-category LavaSearch query across tracks, albums, artists, playlists, or text.
+   * @param query Search query string
+   * @param types Optional array of search result categories to filter by
+   * @param nodeName Optional specific node name to use
+   */
+  public async lavaSearch(query: string, types?: LavaSearchType[], nodeName?: string): Promise<LavaSearchResult> {
+    const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(query);
+    if (node == null) {
+      return {};
+    }
+    return node.rest.lavaSearch(query, types);
+  }
+
 
   /**
    * Creates or gets a player for a guild.

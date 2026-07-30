@@ -8,6 +8,8 @@ import type {
   LavalinkInfo,
   RoutePlannerStatus,
   FiltersObject,
+  LavaSearchType,
+  LavaSearchResult,
 } from "../types/protocol.ts";
 
 export interface RestCacheOptions {
@@ -387,4 +389,18 @@ export class RestClient {
       }
     }
   }
+
+  /**
+   * Performs a multi-category LavaSearch query across tracks, albums, artists, playlists, or texts.
+   * @param query Search query string
+   * @param types Optional array of search result types to include
+   */
+  public async lavaSearch(query: string, types?: LavaSearchType[]): Promise<LavaSearchResult> {
+    const params: Record<string, string> = { query };
+    if (types && types.length > 0) {
+      params.types = types.join(",");
+    }
+    return this.request<LavaSearchResult>("GET", "/lavasearch", undefined, params);
+  }
 }
+

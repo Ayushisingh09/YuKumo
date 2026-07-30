@@ -283,5 +283,27 @@ export class Queue<T> {
       }
     }
   }
+
+  /**
+   * Returns a paginated slice of upcoming tracks in the queue.
+   * @param page 1-based page number (default 1)
+   * @param pageSize Number of items per page (default 10)
+   */
+  public getPage(page = 1, pageSize = 10): { tracks: T[]; page: number; totalPages: number; totalTracks: number } {
+    const upcoming = this.tracks.slice(this.currentIndex + 1);
+    const totalTracks = upcoming.length;
+    const totalPages = Math.max(1, Math.ceil(totalTracks / pageSize));
+    const normalizedPage = Math.max(1, Math.min(page, totalPages));
+    const start = (normalizedPage - 1) * pageSize;
+    const paginatedTracks = upcoming.slice(start, start + pageSize);
+
+    return {
+      tracks: paginatedTracks,
+      page: normalizedPage,
+      totalPages,
+      totalTracks,
+    };
+  }
 }
+
 

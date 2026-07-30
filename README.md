@@ -36,14 +36,18 @@ Yukumo is engineered to outperform older Lavalink wrappers (Hoshimi, Kazagumo, P
 ## ✨ Features
 
 - **Lavalink v4 Protocol**: Full coverage of players, tracks, filters, routeplanner status/unmark, sessions, resuming, and plugins.
+- **Native LavaSearch API**: Multi-category search (`lavaSearch`) for tracks, playlists, albums, artists, and text in a single query.
 - **Node Pool & Load Balancing**: 8 built-in node selection strategies: `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`.
 - **Auto Node Failover**: Zero-downtime audio migration when a Lavalink node disconnects mid-track.
 - **REST Caching & Rate Limit Handling**: In-memory response caching for track search/decode requests, with HTTP 429 `Retry-After` backoff.
-- **Queue Manager**: Loop modes (`off`, `track`, `queue`), play history, shuffle, range removal, priority queueing (`priorityEnqueue`), and state serialization (`export()` / `import()`).
+- **Queue Manager & Pagination**: Loop modes (`off`, `track`, `queue`), play history, shuffle, priority queueing (`priorityEnqueue`), queue pagination (`getPage`), and state serialization (`export()` / `import()`).
 - **Filters & Audio Presets**: Complete DSP audio filter suite plus instant presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, and `setKaraoke()`.
-- **First-Class Adapters**: `DiscordJSAdapter` (discord.js v14), `ErisAdapter` (Eris), and `RawGatewayAdapter` (Oceanic.js, Seyfert, or custom gateways).
+- **First-Class Adapters**: `DiscordJSAdapter` (discord.js v14), `ErisAdapter` (Eris), `SeyfertAdapter` (Seyfert), `OceanicAdapter` (Oceanic.js), `DiscordenoAdapter` (Discordeno), and `RawGatewayAdapter` (custom gateways).
 - **Plugins**: Integrated plugin hooks and helpers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock, and FloweryTTS.
+- **Metrics & Observability**: `PrometheusExporter` for Grafana monitoring dashboards and pluggable `Logger` architecture.
 - **Redis State Storage**: Pluggable storage architecture with a ready-to-use `RedisStorage` adapter for multi-process or sharded bots.
+- **Automated CI/CD**: Built-in GitHub Actions workflow running automated typechecks, unit tests, and builds across Node 18, 20, and 22.
+
 
 ---
 

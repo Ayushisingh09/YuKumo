@@ -1,6 +1,10 @@
 export { DiscordJSAdapter } from "./DiscordJSAdapter.ts";
 export { ErisAdapter } from "./ErisAdapter.ts";
 export { RawGatewayAdapter } from "./RawGatewayAdapter.ts";
+export { SeyfertAdapter } from "./SeyfertAdapter.ts";
+export { OceanicAdapter } from "./OceanicAdapter.ts";
+export { DiscordenoAdapter } from "./DiscordenoAdapter.ts";
 export type { MinimalDiscordJSClient } from "./DiscordJSAdapter.ts";
 export type { MinimalErisClient } from "./ErisAdapter.ts";
 export type { RawGatewayPacket } from "./RawGatewayAdapter.ts";
+

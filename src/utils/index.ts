@@ -74,3 +74,6 @@ export function isPromise(value: unknown): value is Promise<unknown> {
     typeof value === "object" && value !== null && typeof (value as Promise<unknown>).then === "function"
   );
 }
+
+export { type Logger, ConsoleLogger } from "./Logger.ts";
+

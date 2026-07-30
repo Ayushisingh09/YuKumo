@@ -438,3 +438,30 @@ export interface FailingAddress {
   failingTimestamp: number;
   failingTime: string;
 }
+
+export type LavaSearchType = "track" | "album" | "artist" | "playlist" | "text";
+
+export interface LavaSearchResult {
+  tracks?: TrackData[];
+  albums?: Array<{
+    info: PlaylistInfoData;
+    pluginInfo: Record<string, unknown>;
+    tracks: TrackData[];
+  }>;
+  artists?: Array<{
+    info: PlaylistInfoData;
+    pluginInfo: Record<string, unknown>;
+    tracks: TrackData[];
+  }>;
+  playlists?: Array<{
+    info: PlaylistInfoData;
+    pluginInfo: Record<string, unknown>;
+    tracks: TrackData[];
+  }>;
+  texts?: Array<{
+    text: string;
+    pluginInfo: Record<string, unknown>;
+  }>;
+  pluginInfo?: Record<string, unknown>;
+}
+
