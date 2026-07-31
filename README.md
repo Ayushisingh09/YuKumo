@@ -43,21 +43,23 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - `lavaSearch` support for concurrent multi-category queries — tracks, albums, artists, playlists, and text sources
 
 **Node Management**
-- 8 node-selection strategies: `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`
+- 9 node-selection strategies: `RegionSelector`, `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`
 - Zero-downtime automatic player migration on node disconnect or failure
 - Built-in REST response caching with TTL, plus HTTP 429 `Retry-After` parsing and exponential backoff
 
-**Queueing**
+**Queueing & Player Controls**
 - Repeat modes (`off`, `track`, `queue`), play history, shuffle, and priority track injection via `priorityEnqueue`
+- `playPrevious()` to seamlessly replay the last track from history
 - Queue state serialization (`export()` / `import()`) and pagination (`getPage`)
 
 **Audio & Filters**
 - Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass
 - One-line presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, `setKaraoke()`
 
-**Framework Adapters**
+**Framework Adapters & Voice State**
 - First-class gateway adapters for `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, and `Discordeno`
 - `RawGatewayAdapter` for custom or raw gateway integrations
+- Smart auto-reconnects and `playerMoved` events when a user moves the bot across voice channels
 
 **Plugins**
 - Pre-built wrappers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock segment filtering, and FloweryTTS

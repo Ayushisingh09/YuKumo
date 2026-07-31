@@ -6,6 +6,7 @@ export interface NodeConfig {
   password: string;
   name?: string;
   secure?: boolean;
+  region?: string;
   resumeTimeout?: number;
   resumeKey?: string;
   maxRetries?: number;

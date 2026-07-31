@@ -4,6 +4,7 @@ import { PluginManager } from "./plugins/PluginManager.ts";
 import { EventDispatcher } from "./ws/EventDispatcher.ts";
 import { MemoryStorage } from "./storage/MemoryStorage.ts";
 import { VoiceStateTracker } from "./voice/VoiceStateTracker.ts";
+import { SearchCache } from "./utils/SearchCache.ts";
 import { PluginError } from "./errors/index.ts";
 import type { Node } from "./node/Node.ts";
 import type { Player } from "./player/Player.ts";
@@ -106,6 +107,7 @@ export class YuKumo {
   public readonly events: EventDispatcher;
   public readonly storage: StorageAdapter;
   public readonly voice: VoiceStateTracker;
+  public readonly searchCache: SearchCache;
   public defaultSearchSource: string;
   private _userId: string;
 
@@ -115,6 +117,7 @@ export class YuKumo {
     this.storage = options.storageAdapter ?? new MemoryStorage();
     this.events = new EventDispatcher();
     this.voice = new VoiceStateTracker(this.events);
+    this.searchCache = new SearchCache();
     this.plugins = new PluginManager();
     this.players = new PlayerManager();
     this.nodes = new NodeManager(this._userId);
@@ -168,12 +171,22 @@ export class YuKumo {
 
     try {
       const identifier = buildIdentifier(hookResult.query, hookResult.source, this.defaultSearchSource);
+      
+      const cached = this.searchCache.get<SearchResult>(identifier);
+      if (cached != null) {
+        return cached;
+      }
+
       const result = await node.rest.loadTracks(identifier);
       const searchResult = loadResultToSearchResult(result);
 
       const afterResult = await this.plugins.runAfterSearch(searchResult);
       if (afterResult === null) {
         return { loadType: "empty", tracks: [] };
+      }
+
+      if (afterResult.loadType !== "error" && afterResult.loadType !== "empty") {
+        this.searchCache.set(identifier, afterResult);
       }
 
       return afterResult;
@@ -202,11 +215,17 @@ export class YuKumo {
     types?: LavaSearchType[],
     nodeName?: string,
   ): Promise<LavaSearchResult> {
+    const cacheKey = `lava:${query}:${types?.join(",") ?? "all"}`;
+    const cached = this.searchCache.get<LavaSearchResult>(cacheKey);
+    if (cached != null) return cached;
+
     const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(query);
     if (node == null) {
       return {};
     }
-    return node.rest.lavaSearch(query, types);
+    const result = await node.rest.lavaSearch(query, types);
+    this.searchCache.set(cacheKey, result);
+    return result;
   }
 
   /**
@@ -302,6 +321,14 @@ export class YuKumo {
     return next;
   }
 
+  /** Plays the previous track in the queue history */
+  public async playPrevious(guildId: string): Promise<TrackData | null> {
+    const player = this.players.get(guildId);
+    if (player == null) throw new Error(`No player found for guild ${guildId}`);
+
+    return await player.playPrevious();
+  }
+
   /** Sets player volume */
   public async setVolume(guildId: string, volume: number): Promise<void> {
     const player = this.players.get(guildId);
@@ -335,6 +362,12 @@ export class YuKumo {
     }
 
     if (data.userId == null) return;
+    
+    if (player.voiceChannelId !== data.channelId) {
+      const oldChannel = player.voiceChannelId;
+      await player.setVoiceChannel(data.channelId);
+      this.events.emit("playerMoved" as any, data.guildId, oldChannel, data.channelId);
+    }
 
     player.updateVoiceState({ sessionId: data.sessionId, channelId: data.channelId });
   }

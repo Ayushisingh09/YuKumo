@@ -229,6 +229,17 @@ export class Player<TTrack extends TrackData = TrackData> {
     await this.playTrack(track);
   }
 
+  /** Plays the previous track from the queue history */
+  public async playPrevious(): Promise<TTrack | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+
+    const previous = this.queue.previous();
+    if (previous == null) return null;
+
+    await this.playTrack(previous);
+    return previous;
+  }
+
   /** Plays a specific track directly */
   public async playTrack(track: TTrack): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
@@ -362,6 +373,24 @@ export class Player<TTrack extends TrackData = TrackData> {
   /** Clears all applied filters and updates Lavalink node in real time */
   public async clearFilters(): Promise<void> {
     this.filters.clear();
+    await this.setFilters();
+  }
+
+  /** Toggles the nightcore filter preset */
+  public async setNightcore(enabled: boolean = true): Promise<void> {
+    this.filters.setNightcore(enabled);
+    await this.setFilters();
+  }
+
+  /** Toggles the vaporwave filter preset */
+  public async setVaporwave(enabled: boolean = true): Promise<void> {
+    this.filters.setVaporwave(enabled);
+    await this.setFilters();
+  }
+
+  /** Sets the bassboost preset */
+  public async setBassboost(level: "low" | "medium" | "high" | "extreme"): Promise<void> {
+    this.filters.setBassBoost(level);
     await this.setFilters();
   }
 

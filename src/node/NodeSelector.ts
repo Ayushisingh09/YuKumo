@@ -13,6 +13,33 @@ export interface NodeSelector {
 }
 
 /**
+ * Selects nodes based on a specified region, falling back to a secondary selector.
+ */
+export class RegionSelector implements NodeSelector {
+  private readonly region: string;
+  private readonly fallback: NodeSelector;
+
+  public constructor(region: string, fallback?: NodeSelector) {
+    this.region = region;
+    this.fallback = fallback ?? new LeastPenaltySelector();
+  }
+
+  public pick(nodes: Node[], guildId: string): Node | null {
+    if (nodes.length === 0) return null;
+    const connected = nodes.filter((n) => n.state === "connected");
+    if (connected.length === 0) return null;
+
+    const regionalNodes = connected.filter((n) => n.config.region === this.region);
+    
+    if (regionalNodes.length > 0) {
+      return this.fallback.pick(regionalNodes, guildId);
+    }
+    
+    return this.fallback.pick(connected, guildId);
+  }
+}
+
+/**
  * Selects the node with the fewest active audio players.
  */
 export class LeastUsedSelector implements NodeSelector {
