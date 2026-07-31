@@ -1,6 +1,6 @@
 {
   "name": "yukumo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "High-performance, framework-agnostic Lavalink v4 client for JavaScript and TypeScript",
   "keywords": [
     "lavalink",
@@ -22,7 +22,6 @@
   },
   "license": "MIT",
   "author": "Yukumo Contributors",
-
   "type": "module",
   "exports": {
     ".": {
@@ -78,4 +77,3 @@
     "access": "public"
   }
 }
-
