@@ -7,34 +7,40 @@ export class OceanicAdapter {
   private client: any;
   private kumo: YuKumo;
 
+  private readonly packetListener = (packet: any): void => {
+    if (!packet || typeof packet !== "object") return;
+    const t = packet.t;
+    const d = packet.d;
+    if (!t || !d) return;
+
+    if (t === "VOICE_STATE_UPDATE") {
+      this.kumo.handleVoiceStateUpdate({
+        guildId: d.guild_id,
+        sessionId: d.session_id,
+        channelId: d.channel_id ?? null,
+        userId: d.user_id,
+      });
+    } else if (t === "VOICE_SERVER_UPDATE") {
+      this.kumo.handleVoiceServerUpdate(d.guild_id, {
+        token: d.token,
+        endpoint: d.endpoint ?? null,
+      });
+    }
+  };
+
   constructor(client: any, kumo: YuKumo) {
     this.client = client;
     this.kumo = kumo;
-    this.setupListeners();
+    if (typeof this.client?.on === "function") {
+      this.client.on("packet", this.packetListener);
+    }
+    this.kumo.registerAdapter(this);
   }
 
-  private setupListeners(): void {
-    if (typeof this.client?.on === "function") {
-      this.client.on("packet", (packet: any) => {
-        if (!packet || typeof packet !== "object") return;
-        const t = packet.t;
-        const d = packet.d;
-        if (!t || !d) return;
-
-        if (t === "VOICE_STATE_UPDATE") {
-          this.kumo.handleVoiceStateUpdate({
-            guildId: d.guild_id,
-            sessionId: d.session_id,
-            channelId: d.channel_id ?? null,
-            userId: d.user_id,
-          });
-        } else if (t === "VOICE_SERVER_UPDATE") {
-          this.kumo.handleVoiceServerUpdate(d.guild_id, {
-            token: d.token,
-            endpoint: d.endpoint ?? null,
-          });
-        }
-      });
+  /** Detaches the packet listener; called automatically by YuKumo.destroy() */
+  public destroy(): void {
+    if (typeof this.client?.off === "function") {
+      this.client.off("packet", this.packetListener);
     }
   }
 

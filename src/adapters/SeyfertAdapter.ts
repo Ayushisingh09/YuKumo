@@ -7,18 +7,31 @@ export class SeyfertAdapter {
   private client: any;
   private kumo: YuKumo;
 
+  private readonly packetListener = (packet: any): void => this.handlePacket(packet);
+  private subscribedEvent: string | null = null;
+
   constructor(client: any, kumo: YuKumo) {
     this.client = client;
     this.kumo = kumo;
     this.setupListeners();
+    this.kumo.registerAdapter(this);
   }
 
   private setupListeners(): void {
     if (typeof this.client?.events?.rawWS === "function") {
-      this.client.events.rawWS((packet: any) => this.handlePacket(packet));
+      this.client.events.rawWS(this.packetListener);
     } else if (typeof this.client?.on === "function") {
-      this.client.on("rawWS", (packet: any) => this.handlePacket(packet));
-      this.client.on("raw", (packet: any) => this.handlePacket(packet));
+      // Subscribe to exactly one event name — clients emitting both "rawWS" and
+      // "raw" would otherwise process every voice packet twice
+      this.client.on("rawWS", this.packetListener);
+      this.subscribedEvent = "rawWS";
+    }
+  }
+
+  /** Detaches the gateway listener; called automatically by YuKumo.destroy() */
+  public destroy(): void {
+    if (this.subscribedEvent != null && typeof this.client?.off === "function") {
+      this.client.off(this.subscribedEvent, this.packetListener);
     }
   }
 

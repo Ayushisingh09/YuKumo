@@ -30,7 +30,7 @@ export class DaveyAdapter {
       const d = packet.d;
       this.kumo.handleVoiceServerUpdate(String(d.guild_id ?? ""), {
         token: String(d.token ?? ""),
-        endpoint: String(d.endpoint ?? ""),
+        endpoint: d.endpoint != null ? String(d.endpoint) : null,
       });
     }
   }
