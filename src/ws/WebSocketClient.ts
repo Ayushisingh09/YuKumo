@@ -113,12 +113,17 @@ export class WebSocketClient {
     };
 
     const handleMsg = (event: any) => {
-      const data = typeof event === "string" || Buffer.isBuffer(event) ? event.toString() : event?.data != null ? String(event.data) : String(event);
+      const data =
+        typeof event === "string" || Buffer.isBuffer(event)
+          ? event.toString()
+          : event?.data != null
+            ? String(event.data)
+            : String(event);
       this.handleMessage(data);
     };
 
     const handleClose = (event: any) => {
-      const code = typeof event === "number" ? event : event?.code ?? 1000;
+      const code = typeof event === "number" ? event : (event?.code ?? 1000);
       const reason = event?.reason != null ? String(event.reason) : "";
       this._state = "disconnected";
       this.events.emit("debug", `WebSocket closed: code=${code} reason=${reason}`);

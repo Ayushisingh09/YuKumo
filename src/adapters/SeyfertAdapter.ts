@@ -43,7 +43,12 @@ export class SeyfertAdapter {
     }
   }
 
-  public sendVoiceStateUpdate(guildId: string, channelId: string | null, selfDeaf = true, selfMute = false): void {
+  public sendVoiceStateUpdate(
+    guildId: string,
+    channelId: string | null,
+    selfDeaf = true,
+    selfMute = false,
+  ): void {
     if (typeof this.client?.gateway?.send === "function") {
       this.client.gateway.send(0, {
         op: 4,

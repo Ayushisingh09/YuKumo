@@ -160,9 +160,79 @@ export class FilterChain {
       this.remove("karaoke");
       return this;
     }
-    return this.add(
-      new KaraokeFilter({ level: 1.0, monoLevel: 1.0, filterBand: 220, filterWidth: 100 }),
-    );
+    return this.add(new KaraokeFilter({ level: 1.0, monoLevel: 1.0, filterBand: 220, filterWidth: 100 }));
+  }
+
+  /** Applies a Pop equalizer preset */
+  public setPop(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [-0.06, -0.04, 0.02, 0.08, 0.14, 0.14, 0.08, 0.02, -0.04, -0.06];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  /** Applies a Soft equalizer preset */
+  public setSoft(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [0.0, 0.02, 0.04, 0.06, 0.04, 0.02, 0.0, -0.02, -0.04, -0.06];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  /** Applies a Treble & Bass equalizer preset */
+  public setTrebleBass(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [0.2, 0.15, 0.1, 0.05, 0.0, 0.0, 0.05, 0.1, 0.15, 0.2];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  /** Applies a Rock equalizer preset */
+  public setRock(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [0.15, 0.1, 0.05, -0.05, -0.1, -0.05, 0.05, 0.1, 0.15, 0.2];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  /** Applies a Classical equalizer preset */
+  public setClassical(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [0.15, 0.12, 0.08, 0.04, -0.02, -0.02, 0.0, 0.04, 0.08, 0.12];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  /** Applies an Electronic equalizer preset */
+  public setElectronic(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    const gains = [0.2, 0.15, 0.05, -0.05, -0.05, 0.05, 0.1, 0.15, 0.2, 0.25];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
   }
 
   /** Clones this filter chain */
@@ -174,4 +244,3 @@ export class FilterChain {
     return chain;
   }
 }
-

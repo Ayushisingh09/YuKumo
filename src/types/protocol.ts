@@ -464,4 +464,3 @@ export interface LavaSearchResult {
   }>;
   pluginInfo?: Record<string, unknown>;
 }
-

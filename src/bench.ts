@@ -48,7 +48,9 @@ async function benchmarkQueueOps(count: number): Promise<void> {
     queue.enqueue(track);
   }
   const enqueueTime = performance.now() - startEnqueue;
-  console.log(`  Enqueue ${count} tracks: ${enqueueTime.toFixed(2)}ms (${(count / enqueueTime * 1000).toFixed(0)} ops/s)`);
+  console.log(
+    `  Enqueue ${count} tracks: ${enqueueTime.toFixed(2)}ms (${((count / enqueueTime) * 1000).toFixed(0)} ops/s)`,
+  );
 
   let dequeued = 0;
   queue.start();
@@ -57,7 +59,9 @@ async function benchmarkQueueOps(count: number): Promise<void> {
     dequeued++;
   }
   const dequeueTime = performance.now() - startDequeue;
-  console.log(`  Iterate ${dequeued} tracks: ${dequeueTime.toFixed(2)}ms (${(dequeued / dequeueTime * 1000).toFixed(0)} ops/s)`);
+  console.log(
+    `  Iterate ${dequeued} tracks: ${dequeueTime.toFixed(2)}ms (${((dequeued / dequeueTime) * 1000).toFixed(0)} ops/s)`,
+  );
 
   // shuffle benchmark
   const shuffleTracks = Array.from({ length: count }, (_, i) => makeTrack(i));
@@ -72,7 +76,9 @@ async function benchmarkQueueOps(count: number): Promise<void> {
 
 async function benchmarkEventDispatch(count: number): Promise<void> {
   const dispatcher = new EventDispatcher();
-  const handler = () => { /* noop */ };
+  const handler = () => {
+    /* noop */
+  };
 
   const startRegister = performance.now();
   for (let i = 0; i < count; i++) {
@@ -89,7 +95,9 @@ async function benchmarkEventDispatch(count: number): Promise<void> {
     dispatcher.emit("trackStart", "guild", makeTrack(i));
   }
   const emitTime = performance.now() - startEmit;
-  console.log(`  Emit ${count} events: ${emitTime.toFixed(2)}ms (${(count / emitTime * 1000).toFixed(0)} ops/s)`);
+  console.log(
+    `  Emit ${count} events: ${emitTime.toFixed(2)}ms (${((count / emitTime) * 1000).toFixed(0)} ops/s)`,
+  );
 }
 
 async function benchmarkAll(): Promise<void> {

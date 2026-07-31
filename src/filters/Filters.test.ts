@@ -167,4 +167,28 @@ describe("FilterChain", () => {
     expect(payload.karaoke).toEqual({ level: 0.5 });
     expect(payload.lowPass).toEqual({ smoothing: 20.0 });
   });
+
+  it("should apply Pop, Soft, Rock, TrebleBass, Classical, Electronic EQ presets", () => {
+    const chain = new FilterChain();
+    chain.setPop();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setSoft();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setRock();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setTrebleBass();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setClassical();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setElectronic();
+    expect(chain.has("equalizer")).toBe(true);
+
+    chain.setPop(false);
+    expect(chain.has("equalizer")).toBe(false);
+  });
 });

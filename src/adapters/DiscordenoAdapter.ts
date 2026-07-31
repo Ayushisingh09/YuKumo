@@ -31,7 +31,12 @@ export class DiscordenoAdapter {
     }
   }
 
-  public buildVoiceStatePayload(guildId: string, channelId: string | null, selfDeaf = true, selfMute = false) {
+  public buildVoiceStatePayload(
+    guildId: string,
+    channelId: string | null,
+    selfDeaf = true,
+    selfMute = false,
+  ) {
     return {
       op: 4,
       d: {

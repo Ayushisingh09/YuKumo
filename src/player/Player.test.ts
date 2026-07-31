@@ -214,6 +214,27 @@ describe("Player", () => {
     expect(player.position).toBe(50000);
   });
 
+  it("should set and clear filters in real time", async () => {
+    const node = createMockNode();
+    const player = createPlayer(node);
+
+    player.filters.setBassBoost("high");
+    await player.setFilters();
+    expect(node.rest.updatePlayer).toHaveBeenCalled();
+
+    await player.clearFilters();
+    expect(player.filters.getAll()).toHaveLength(0);
+  });
+
+  it("should configure autoplay and fetcher", () => {
+    const player = createPlayer();
+    const mockFetcher = vi.fn();
+    player.setAutoplay(true, mockFetcher);
+
+    expect(player.autoplay).toBe(true);
+    expect(player.autoplayFetcher).toBe(mockFetcher);
+  });
+
   it("should throw on operations when destroyed", async () => {
     const player = createPlayer();
     await player.destroy();

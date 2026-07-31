@@ -289,7 +289,10 @@ export class Queue<T> {
    * @param page 1-based page number (default 1)
    * @param pageSize Number of items per page (default 10)
    */
-  public getPage(page = 1, pageSize = 10): { tracks: T[]; page: number; totalPages: number; totalTracks: number } {
+  public getPage(
+    page = 1,
+    pageSize = 10,
+  ): { tracks: T[]; page: number; totalPages: number; totalTracks: number } {
     const upcoming = this.tracks.slice(this.currentIndex + 1);
     const totalTracks = upcoming.length;
     const totalPages = Math.max(1, Math.ceil(totalTracks / pageSize));
@@ -305,5 +308,3 @@ export class Queue<T> {
     };
   }
 }
-
-
