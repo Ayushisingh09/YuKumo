@@ -82,7 +82,7 @@ When creating new features or fixing bugs:
    git push origin feat/my-amazing-feature
    ```
 4. **Open a Pull Request**:
-   Navigate to [titanxdevz/Yukumo](https://github.com/titanxdevz/Yukumo) and submit your PR with a summary of changes and testing evidence.
+   Navigate to [Nex-Devz/YuKumo](https://github.com/Nex-Devz/YuKumo) and submit your PR with a summary of changes and testing evidence.
 
 ---
 

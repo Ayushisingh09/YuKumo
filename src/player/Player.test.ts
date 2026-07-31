@@ -38,11 +38,13 @@ function createMockNode(name = "test-node"): Node {
 }
 
 function createPlayer(node?: Node): Player {
+  const kumoMock = {} as any;
   return new Player({
     guildId: "guild-1",
     node: node ?? createMockNode(),
     voiceChannelId: "channel-1",
     textChannelId: "text-1",
+    kumo: kumoMock,
   });
 }
 
@@ -250,7 +252,8 @@ describe("PlayerManager", () => {
   let manager: PlayerManager;
 
   beforeEach(() => {
-    manager = new PlayerManager();
+    const kumoMock = {} as any;
+    manager = new PlayerManager(kumoMock);
   });
 
   it("should create a player", () => {

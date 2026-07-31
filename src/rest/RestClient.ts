@@ -402,4 +402,21 @@ export class RestClient {
     }
     return this.request<LavaSearchResult>("GET", "/lavasearch", undefined, params);
   }
+
+  /**
+   * Fetches lyrics for a specific track.
+   * Note: This requires the Lavalink Lyrics plugin to be installed on the node.
+   * @param encodedTrack The encoded track base64 string
+   */
+  public async getLyrics(encodedTrack: string): Promise<any> {
+    const key = `lyrics:${encodedTrack}`;
+    const cached = this.getCached<any>(key);
+    if (cached) return cached;
+
+    const params: Record<string, string> = { track: encodedTrack };
+    // The lyrics plugin typically binds to /v4/lyrics or /v4/loadlyrics
+    const res = await this.request<any>("GET", "/lyrics", undefined, params);
+    this.setCached(key, res);
+    return res;
+  }
 }

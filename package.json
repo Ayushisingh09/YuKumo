@@ -15,10 +15,10 @@
   "homepage": "https://yukumo.vercel.app",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/titanxdevz/Yukumo.git"
+    "url": "git+https://github.com/Nex-Devz/YuKumo.git"
   },
   "bugs": {
-    "url": "https://github.com/titanxdevz/Yukumo/issues"
+    "url": "https://github.com/Nex-Devz/YuKumo/issues"
   },
   "license": "MIT",
   "author": "Yukumo Contributors",

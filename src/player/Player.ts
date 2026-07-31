@@ -7,6 +7,9 @@ import { PlayerNotConnectedError, PlayerError } from "../errors/index.ts";
 import { EventDispatcher } from "../ws/EventDispatcher.ts";
 import type { EventName, EventCallback } from "../types/internal.ts";
 
+import type { YuKumo } from "../Kumo.ts";
+import type { SearchResult } from "../types/internal.ts";
+
 export type PlayerStatus = "idle" | "playing" | "paused" | "destroyed";
 
 export interface PlayerOptions {
@@ -22,6 +25,8 @@ export interface PlayerOptions {
   selfDeaf?: boolean;
   /** Initial self mute status */
   selfMute?: boolean;
+  /** Reference to the main YuKumo client */
+  kumo: YuKumo;
 }
 
 /**
@@ -32,6 +37,9 @@ export class Player<TTrack extends TrackData = TrackData> {
   public readonly queue: Queue<TTrack>;
   public readonly filters: FilterChain;
   public readonly events: EventDispatcher;
+  
+  /** Custom data map for developers to store persistent session variables */
+  public readonly data: Map<string, any> = new Map();
 
   /** Whether autoplay is enabled when queue ends */
   public autoplay: boolean = false;
@@ -39,6 +47,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public autoplayFetcher?: (lastTrack: TTrack) => Promise<TTrack | null>;
 
   private _node: Node;
+  private readonly kumo: YuKumo;
   private _status: PlayerStatus = "idle";
   private _position: number = 0;
   private _volume: number = 100;
@@ -82,6 +91,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public constructor(options: PlayerOptions) {
     this.guildId = options.guildId;
     this._node = options.node;
+    this.kumo = options.kumo;
     this._voiceChannelId = options.voiceChannelId;
     this._textChannelId = options.textChannelId ?? null;
     this.queue = new Queue<TTrack>();
@@ -217,17 +227,6 @@ export class Player<TTrack extends TrackData = TrackData> {
     }
   }
 
-  /** Begins or resumes queue playback */
-  public async play(): Promise<void> {
-    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
-
-    const track = this.queue.currentTrack ?? this.queue.start();
-    if (track == null) {
-      throw new PlayerError("No tracks in queue", this.guildId);
-    }
-
-    await this.playTrack(track);
-  }
 
   /** Plays the previous track from the queue history */
   public async playPrevious(): Promise<TTrack | null> {
@@ -238,6 +237,48 @@ export class Player<TTrack extends TrackData = TrackData> {
 
     await this.playTrack(previous);
     return previous;
+  }
+
+  /**
+   * Shortcut to search for tracks using the main YuKumo instance.
+   * @param query Search query
+   * @param source Optional search source (e.g. ytsearch, scsearch)
+   */
+  public search(query: string, source?: string): Promise<SearchResult> {
+    return this.kumo.search(query, source);
+  }
+
+  /**
+   * Sets the queue repeat mode.
+   * @param mode "none", "track", or "queue"
+   */
+  public setLoop(mode: "none" | "track" | "queue"): this {
+    this.queue.setRepeatMode(mode);
+    return this;
+  }
+
+  /**
+   * Fetches lyrics for the current track or a specified track using Lavalink Lyrics plugin.
+   * @param encodedTrack Optional encoded track. Defaults to the currently playing track.
+   */
+  public async getLyrics(encodedTrack?: string | null): Promise<any> {
+    const trackToUse = encodedTrack ?? this.queue.currentTrack?.encoded;
+    if (!trackToUse) return null;
+    return this.kumo.getLyrics(trackToUse);
+  }
+
+  /**
+   * Begins playback of the given track. If none provided, plays next in queue.
+   */
+  public async play(track?: TrackData): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+
+    const trackToPlay = (track as TTrack) ?? this.queue.currentTrack ?? this.queue.start();
+    if (trackToPlay == null) {
+      throw new PlayerError("No tracks in queue", this.guildId);
+    }
+
+    await this.playTrack(trackToPlay);
   }
 
   /** Plays a specific track directly */

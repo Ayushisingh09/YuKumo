@@ -1,16 +1,23 @@
 import { Player } from "./Player.ts";
 import type { PlayerOptions } from "./Player.ts";
+import type { YuKumo } from "../Kumo.ts";
 
 export class PlayerManager {
   private readonly players = new Map<string, Player>();
+  private readonly kumo: YuKumo;
 
-  public create(options: PlayerOptions): Player {
+  public constructor(kumo: YuKumo) {
+    this.kumo = kumo;
+  }
+
+  public create(options: Omit<PlayerOptions, "kumo">): Player {
     const existing = this.players.get(options.guildId);
     if (existing != null) {
       return existing;
     }
 
-    const player = new Player(options);
+    const playerOptions: PlayerOptions = { ...options, kumo: this.kumo };
+    const player = new Player(playerOptions);
     this.players.set(options.guildId, player);
     return player;
   }

@@ -118,9 +118,9 @@ export class YuKumo {
     this.events = new EventDispatcher();
     this.voice = new VoiceStateTracker(this.events);
     this.searchCache = new SearchCache();
-    this.plugins = new PluginManager();
-    this.players = new PlayerManager();
     this.nodes = new NodeManager(this._userId);
+    this.players = new PlayerManager(this);
+    this.plugins = new PluginManager();
 
     this.registerNodes(options.nodes);
     this.registerPlugins(options.plugins);
@@ -226,6 +226,18 @@ export class YuKumo {
     const result = await node.rest.lavaSearch(query, types);
     this.searchCache.set(cacheKey, result);
     return result;
+  }
+
+  /**
+   * Fetches lyrics for a specific track.
+   * Note: This requires the Lavalink Lyrics plugin to be installed on the node.
+   * @param encodedTrack The encoded track base64 string
+   * @param nodeName Optional specific node name to use
+   */
+  public async getLyrics(encodedTrack: string, nodeName?: string): Promise<any> {
+    const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(encodedTrack);
+    if (node == null) return null;
+    return node.rest.getLyrics(encodedTrack);
   }
 
   /**
