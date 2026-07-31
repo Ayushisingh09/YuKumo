@@ -18,8 +18,8 @@
  */
 
 import { createBot, Intents, startBot } from "@discordeno/bot";
-import { YuKumo } from "YuKumo";
-import type { VoiceStateUpdate, VoiceServerUpdate, SearchResult } from "YuKumo";
+import { YuKumo } from "yukumo";
+import type { VoiceStateUpdate, VoiceServerUpdate, SearchResult } from "yukumo";
 
 const TOKEN = process.env.DISCORD_TOKEN ?? "";
 const LAVALINK_HOST = process.env.LAVALINK_HOST ?? "localhost";
@@ -31,7 +31,7 @@ if (TOKEN === "") {
   process.exit(1);
 }
 
-const YuKumo = new YuKumo({
+const yukumo = new YuKumo({
   nodes: [{ host: LAVALINK_HOST, port: LAVALINK_PORT, password: LAVALINK_PASS }],
 });
 
@@ -42,7 +42,7 @@ const bot = createBot({
     ready: async (_data) => {
       console.log("Logged in");
 
-      await YuKumo.init();
+      await yukumo.init();
       console.log("YuKumo initialized");
     },
     voiceStateUpdate: async (data) => {
@@ -54,14 +54,14 @@ const bot = createBot({
         channelId: data.channelId?.toString() ?? null,
         userId: data.userId.toString(),
       };
-      await YuKumo.handleVoiceStateUpdate(update);
+      await yukumo.handleVoiceStateUpdate(update);
     },
     voiceServerUpdate: async (data) => {
       const update: VoiceServerUpdate = {
         token: data.token,
         endpoint: data.endpoint,
       };
-      await YuKumo.handleVoiceServerUpdate(data.guildId.toString(), update);
+      await yukumo.handleVoiceServerUpdate(data.guildId.toString(), update);
     },
     messageCreate: async (message) => {
       if (message.isFromBot || !message.content.startsWith("!")) return;
@@ -81,7 +81,7 @@ const bot = createBot({
         return;
       }
 
-      let player = YuKumo.getPlayer(gid);
+      let player = yukumo.getPlayer(gid);
 
       if (player == null && command !== "play") {
         await message.reply("No player exists. Use !play first");
@@ -98,42 +98,42 @@ const bot = createBot({
             }
 
             if (player == null) {
-              player = await YuKumo.createPlayer({
+              player = await yukumo.createPlayer({
                 guildId: gid,
                 voiceChannelId: memberVoice.channelId.toString(),
               });
             }
 
-            const result: SearchResult = await YuKumo.search(query);
+            const result: SearchResult = await yukumo.search(query);
             if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
               await message.reply("No results found");
               return;
             }
 
             const track = result.tracks[0]!;
-            await YuKumo.play(gid, track);
+            await yukumo.play(gid, track);
             await message.reply(`Playing: **${track.info.title}**`);
             break;
           }
           case "pause": {
-            await YuKumo.pause(gid);
+            await yukumo.pause(gid);
             await message.reply("Paused");
             break;
           }
           case "resume": {
-            await YuKumo.resume(gid);
+            await yukumo.resume(gid);
             await message.reply("Resumed");
             break;
           }
           case "skip": {
-            const skipped = await YuKumo.skip(gid);
+            const skipped = await yukumo.skip(gid);
             await message.reply(
               skipped != null ? `Skipped **${skipped.info.title}**` : "No more tracks in queue",
             );
             break;
           }
           case "stop": {
-            await YuKumo.stop(gid);
+            await yukumo.stop(gid);
             await message.reply("Stopped");
             break;
           }
@@ -143,12 +143,12 @@ const bot = createBot({
               await message.reply("Usage: !volume <0-1000>");
               return;
             }
-            await YuKumo.setVolume(gid, level);
+            await yukumo.setVolume(gid, level);
             await message.reply(`Volume set to ${level}`);
             break;
           }
           case "destroy": {
-            await YuKumo.destroyPlayer(gid);
+            await yukumo.destroyPlayer(gid);
             await message.reply("Player destroyed");
             break;
           }
@@ -161,7 +161,7 @@ const bot = createBot({
 });
 
 process.on("SIGINT", async () => {
-  await YuKumo.destroy();
+  await yukumo.destroy();
   await bot.rest.close();
   process.exit(0);
 });

@@ -18,8 +18,8 @@
  */
 
 import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder } from "discord.js";
-import { YuKumo } from "YuKumo";
-import type { VoiceStateUpdate, VoiceServerUpdate, SearchResult } from "YuKumo";
+import { YuKumo, DiscordJSAdapter } from "yukumo";
+import type { SearchResult } from "yukumo";
 
 const TOKEN = process.env.DISCORD_TOKEN ?? "";
 const LAVALINK_HOST = process.env.LAVALINK_HOST ?? "localhost";
@@ -31,10 +31,7 @@ if (TOKEN === "") {
   process.exit(1);
 }
 
-const YuKumo = new YuKumo({
-  nodes: [{ host: LAVALINK_HOST, port: LAVALINK_PORT, password: LAVALINK_PASS }],
-});
-
+// 1. Create the Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -44,10 +41,19 @@ const client = new Client({
   ],
 });
 
+// 2. Create the YuKumo Lavalink client (separate from discordClient)
+const yukumo = new YuKumo({
+  nodes: [{ host: LAVALINK_HOST, port: LAVALINK_PORT, password: LAVALINK_PASS }],
+});
+
+// 3. Wire up the DiscordJSAdapter — handles voice state forwarding automatically
+const adapter = new DiscordJSAdapter(client, yukumo);
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
 
-  await YuKumo.init();
+  yukumo.setUserId(c.user.id);
+  await yukumo.init();
   console.log("YuKumo initialized");
 
   const rest = new REST().setToken(TOKEN);
@@ -92,24 +98,6 @@ client.once(Events.ClientReady, async (c) => {
   }
 });
 
-client.on(Events.VoiceStateUpdate, (oldState, newState) => {
-  const update: VoiceStateUpdate = {
-    guildId: newState.guild.id,
-    sessionId: newState.sessionId ?? "",
-    channelId: newState.channelId,
-    userId: newState.id,
-  };
-  YuKumo.handleVoiceStateUpdate(update);
-});
-
-client.on(Events.VoiceServerUpdate, (data) => {
-  const update: VoiceServerUpdate = {
-    token: data.token,
-    endpoint: data.endpoint,
-  };
-  YuKumo.handleVoiceServerUpdate(data.guild.id, update);
-});
-
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -125,8 +113,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  const guild = interaction.guild!;
-  let player = YuKumo.getPlayer(guildId);
+  let player = yukumo.getPlayer(guildId);
 
   if (player == null && commandName !== "play") {
     await interaction.reply({ content: "No player exists. Use /play first", ephemeral: true });
@@ -138,40 +125,43 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const query = interaction.options.getString("query", true);
 
       if (player == null) {
-        player = await YuKumo.createPlayer({
+        player = await yukumo.createPlayer({
           guildId,
           voiceChannelId: member.voice.channelId,
           textChannelId: interaction.channelId,
         });
+
+        // Connect to voice via the adapter
+        adapter.sendVoiceStateUpdate(guildId, member.voice.channelId);
       }
 
-      const result: SearchResult = await YuKumo.search(query);
+      const result: SearchResult = await yukumo.search(query);
       if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
         await interaction.reply({ content: "No results found", ephemeral: true });
         return;
       }
 
       const track = result.tracks[0]!;
-      await YuKumo.play(guildId, track);
+      await yukumo.play(guildId, track);
 
       await interaction.reply({ content: `Playing: **${track.info.title}**` });
       break;
     }
 
     case "pause": {
-      await YuKumo.pause(guildId);
+      await yukumo.pause(guildId);
       await interaction.reply({ content: "Paused" });
       break;
     }
 
     case "resume": {
-      await YuKumo.resume(guildId);
+      await yukumo.resume(guildId);
       await interaction.reply({ content: "Resumed" });
       break;
     }
 
     case "skip": {
-      const skipped = await YuKumo.skip(guildId);
+      const skipped = await yukumo.skip(guildId);
       await interaction.reply({
         content: skipped != null ? `Skipped **${skipped.info.title}**` : "No more tracks in queue",
       });
@@ -179,20 +169,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     case "stop": {
-      await YuKumo.stop(guildId);
+      await yukumo.stop(guildId);
       await interaction.reply({ content: "Stopped" });
       break;
     }
 
     case "volume": {
       const level = interaction.options.getInteger("level", true);
-      await YuKumo.setVolume(guildId, level);
+      await yukumo.setVolume(guildId, level);
       await interaction.reply({ content: `Volume set to ${level}` });
       break;
     }
 
     case "destroy": {
-      await YuKumo.destroyPlayer(guildId);
+      await yukumo.destroyPlayer(guildId);
       await interaction.reply({ content: "Player destroyed" });
       break;
     }
@@ -200,7 +190,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 process.on("SIGINT", async () => {
-  await YuKumo.destroy();
+  await yukumo.destroy();
   await client.destroy();
   process.exit(0);
 });

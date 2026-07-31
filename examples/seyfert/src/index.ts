@@ -18,8 +18,8 @@
  */
 
 import { Client, type Message } from "seyfert";
-import { YuKumo } from "YuKumo";
-import type { VoiceStateUpdate, VoiceServerUpdate, SearchResult } from "YuKumo";
+import { YuKumo } from "yukumo";
+import type { VoiceStateUpdate, VoiceServerUpdate, SearchResult } from "yukumo";
 
 const TOKEN = process.env.DISCORD_TOKEN ?? "";
 const LAVALINK_HOST = process.env.LAVALINK_HOST ?? "localhost";
@@ -31,7 +31,7 @@ if (TOKEN === "") {
   process.exit(1);
 }
 
-const YuKumo = new YuKumo({
+const yukumo = new YuKumo({
   nodes: [{ host: LAVALINK_HOST, port: LAVALINK_PORT, password: LAVALINK_PASS }],
 });
 
@@ -40,7 +40,7 @@ const client = new Client();
 client.once("ready", async (c) => {
   console.log(`Logged in as ${c.user?.tag ?? "unknown"}`);
 
-  await YuKumo.init();
+  await yukumo.init();
   console.log("YuKumo initialized");
 });
 
@@ -54,7 +54,7 @@ client.on("voiceStateUpdate", async (voiceState) => {
     channelId: voiceState.channelId,
     userId: voiceState.id,
   };
-  await YuKumo.handleVoiceStateUpdate(update);
+  await yukumo.handleVoiceStateUpdate(update);
 });
 
 client.on("voiceServerUpdate", async (data) => {
@@ -65,7 +65,7 @@ client.on("voiceServerUpdate", async (data) => {
     token: data.token,
     endpoint: data.endpoint,
   };
-  await YuKumo.handleVoiceServerUpdate(guildId, update);
+  await yukumo.handleVoiceServerUpdate(guildId, update);
 });
 
 client.on("messageCreate", async (message: Message) => {
@@ -88,7 +88,7 @@ client.on("messageCreate", async (message: Message) => {
     return;
   }
 
-  let player = YuKumo.getPlayer(guildId);
+  let player = yukumo.getPlayer(guildId);
 
   if (player == null && command !== "play") {
     await message.reply("No player exists. Use !play first");
@@ -105,43 +105,43 @@ client.on("messageCreate", async (message: Message) => {
         }
 
         if (player == null) {
-          player = await YuKumo.createPlayer({
+          player = await yukumo.createPlayer({
             guildId,
             voiceChannelId: voiceState.channelId,
             textChannelId: message.channelId,
           });
         }
 
-        const result: SearchResult = await YuKumo.search(query);
+        const result: SearchResult = await yukumo.search(query);
         if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
           await message.reply("No results found");
           return;
         }
 
         const track = result.tracks[0]!;
-        await YuKumo.play(guildId, track);
+        await yukumo.play(guildId, track);
         await message.reply(`Playing: **${track.info.title}**`);
         break;
       }
       case "pause": {
-        await YuKumo.pause(guildId);
+        await yukumo.pause(guildId);
         await message.reply("Paused");
         break;
       }
       case "resume": {
-        await YuKumo.resume(guildId);
+        await yukumo.resume(guildId);
         await message.reply("Resumed");
         break;
       }
       case "skip": {
-        const skipped = await YuKumo.skip(guildId);
+        const skipped = await yukumo.skip(guildId);
         await message.reply(
           skipped != null ? `Skipped **${skipped.info.title}**` : "No more tracks in queue",
         );
         break;
       }
       case "stop": {
-        await YuKumo.stop(guildId);
+        await yukumo.stop(guildId);
         await message.reply("Stopped");
         break;
       }
@@ -151,12 +151,12 @@ client.on("messageCreate", async (message: Message) => {
           await message.reply("Usage: !volume <0-1000>");
           return;
         }
-        await YuKumo.setVolume(guildId, level);
+        await yukumo.setVolume(guildId, level);
         await message.reply(`Volume set to ${level}`);
         break;
       }
       case "destroy": {
-        await YuKumo.destroyPlayer(guildId);
+        await yukumo.destroyPlayer(guildId);
         await message.reply("Player destroyed");
         break;
       }
@@ -167,7 +167,7 @@ client.on("messageCreate", async (message: Message) => {
 });
 
 process.on("SIGINT", async () => {
-  await YuKumo.destroy();
+  await yukumo.destroy();
   await client.destroy();
   process.exit(0);
 });

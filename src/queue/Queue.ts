@@ -132,11 +132,17 @@ export class Queue<T> {
     return removed;
   }
 
-  /** Advances queue to next track based on current repeat mode */
-  public next(): T | null {
+  /**
+   * Advances queue to next track based on current repeat mode.
+   * In non-repeat-queue modes, consumed tracks are dropped from the queue
+   * (history keeps the capped played list) so long-running queues can't grow unboundedly.
+   * @param forceAdvance Skips repeat-track behavior — used when the current track failed
+   * to load, so a broken track can't retry-loop forever
+   */
+  public next(forceAdvance: boolean = false): T | null {
     if (this.tracks.length === 0) return null;
 
-    if (this._repeatMode === "track" && this.currentTrack != null) {
+    if (this._repeatMode === "track" && !forceAdvance && this.currentTrack != null) {
       return this.currentTrack;
     }
 
@@ -147,21 +153,23 @@ export class Queue<T> {
       return this.tracks[this.currentIndex] as T;
     }
 
-    if (this.currentIndex < this.tracks.length - 1) {
-      this.currentIndex++;
-      return this.tracks[this.currentIndex] as T;
+    if (this.currentIndex >= 0) {
+      this.tracks.splice(0, this.currentIndex + 1);
     }
-
-    this.currentIndex = -1;
-    return null;
+    this.currentIndex = this.tracks.length > 0 ? 0 : -1;
+    return this.currentTrack;
   }
 
-  /** Steps back to previous track in history or queue */
+  /**
+   * Steps back to the previous track. History tracks are reinserted into the queue
+   * at the current position so queue state and currentTrack stay consistent.
+   */
   public previous(): T | null {
-    if (this.tracks.length === 0) return null;
-
     const historyTrack = this.history.pop() ?? null;
     if (historyTrack != null) {
+      const insertAt = this.currentIndex >= 0 ? this.currentIndex : 0;
+      this.tracks.splice(insertAt, 0, historyTrack);
+      this.currentIndex = insertAt;
       return historyTrack;
     }
 

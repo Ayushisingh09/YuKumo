@@ -358,8 +358,10 @@ describe("Queue", () => {
       queue.start();
       queue.next();
 
+      // after next(), consumed tracks are dropped: queue is [track-2, track-3], current track-2
       queue.remove(1, 1);
-      expect(queue.currentTrack).toBe("track-3");
+      expect(queue.currentTrack).toBe("track-2");
+      expect(queue.tracksList).toEqual(["track-2"]);
     });
 
     it("should handle remove of current track and advance to next", () => {

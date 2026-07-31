@@ -12,6 +12,8 @@ export interface NodeConfig {
   maxRetries?: number;
   retryDelay?: number;
   retryDelayMax?: number;
+  /** Milliseconds to wait for the WebSocket handshake before failing connect() (default 15000) */
+  connectTimeout?: number;
 }
 
 export interface NodeStats {
@@ -38,9 +40,27 @@ export interface NodeStats {
 
 export type NodeState = "disconnected" | "connecting" | "connected" | "destroyed";
 
+/** Discord gateway OP4 voice state payload, dispatched through the user-provided `send` function */
+export interface VoiceGatewayPayload {
+  op: 4;
+  d: {
+    guild_id: string;
+    channel_id: string | null;
+    self_mute: boolean;
+    self_deaf: boolean;
+  };
+}
+
 export interface ManagerOptions {
   nodes: NodeConfig[];
   userId?: string;
+  /**
+   * Sends a raw payload to the Discord gateway for the shard handling the guild.
+   * Required for player.connect()/disconnect()/setVoiceChannel() to actually join
+   * or leave voice channels. Example (discord.js):
+   * `send: (guildId, payload) => client.guilds.cache.get(guildId)?.shard.send(payload)`
+   */
+  send?: (guildId: string, payload: VoiceGatewayPayload) => void;
   defaultSearchSource?: string;
   defaultNodeSelector?: {
     pick: (
@@ -107,6 +127,8 @@ export interface StorageAdapter {
   delete(key: string): Promise<boolean>;
   has(key: string): Promise<boolean>;
   clear(): Promise<void>;
+  /** Optional teardown hook; called by YuKumo.destroy() so backends can release connections */
+  disconnect?(): Promise<void>;
 }
 
 export type EventMap = {

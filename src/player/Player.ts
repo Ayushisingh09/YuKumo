@@ -61,6 +61,8 @@ export class Player<TTrack extends TrackData = TrackData> {
   };
   private _paused: boolean = false;
   private _destroyed: boolean = false;
+  private _selfDeaf: boolean;
+  private _selfMute: boolean;
 
   private readonly boundOnTrackEnd = (guildId: string, track: TrackData, reason: string) => {
     if (guildId !== this.guildId) return;
@@ -94,6 +96,8 @@ export class Player<TTrack extends TrackData = TrackData> {
     this.kumo = options.kumo;
     this._voiceChannelId = options.voiceChannelId;
     this._textChannelId = options.textChannelId ?? null;
+    this._selfDeaf = options.selfDeaf ?? true;
+    this._selfMute = options.selfMute ?? false;
     this.queue = new Queue<TTrack>();
     this.filters = new FilterChain();
     this.events = new EventDispatcher();
@@ -162,17 +166,34 @@ export class Player<TTrack extends TrackData = TrackData> {
     ws.off("playerUpdate", this.boundOnPlayerUpdate as never);
   }
 
-  private async handleTrackEnd(lastTrack: TTrack, _reason: string): Promise<void> {
+  /** Consecutive queue-advance failures; guards against retry-looping a dead node or all-broken queue */
+  private _advanceFailures = 0;
+
+  private async handleTrackEnd(lastTrack: TTrack, reason: string): Promise<void> {
     if (this._destroyed) return;
 
-    const nextTrack = this.queue.next();
+    // A track that failed to load must not be repeated, or repeat-track mode
+    // would hammer the node with the same broken track forever
+    const forceAdvance = reason === "loadFailed" || reason === "stuck";
+    const nextTrack = this.queue.next(forceAdvance);
     if (nextTrack != null) {
       try {
         await this.playTrack(nextTrack);
-      } catch {
-        // advance failure
+        this._advanceFailures = 0;
+        return;
+      } catch (error) {
+        this._advanceFailures++;
+        this.events.emit(
+          "debug",
+          `Failed to start next track in guild ${this.guildId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        if (this._advanceFailures < 3) {
+          // Skip the broken track and try the one after it
+          return this.handleTrackEnd(nextTrack, "loadFailed");
+        }
+        this._advanceFailures = 0;
+        // Too many consecutive failures — fall through to autoplay/queueEnd
       }
-      return;
     }
 
     if (this.autoplay) {
@@ -200,8 +221,11 @@ export class Player<TTrack extends TrackData = TrackData> {
           await this.playTrack(trackToPlay);
           return;
         }
-      } catch {
-        // fallback to queue end
+      } catch (error) {
+        this.events.emit(
+          "debug",
+          `Autoplay failed in guild ${this.guildId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -218,12 +242,15 @@ export class Player<TTrack extends TrackData = TrackData> {
 
   /** Reassigns player to a new Lavalink node (for node failover / load balancing) */
   public async setNode(node: Node): Promise<void> {
+    const oldNode = this._node;
     this.removeNodeListeners();
     this._node = node;
     this.setupNodeListeners();
+    oldNode.playerCount = Math.max(0, oldNode.playerCount - 1);
+    node.playerCount += 1;
 
     if (this._status === "playing" && this.currentTrack != null) {
-      await this.playTrack(this.currentTrack);
+      await this.playTrack(this.currentTrack, { position: this._position });
     }
   }
 
@@ -282,11 +309,16 @@ export class Player<TTrack extends TrackData = TrackData> {
   }
 
   /** Plays a specific track directly */
-  public async playTrack(track: TTrack): Promise<void> {
+  public async playTrack(track: TTrack, options?: { position?: number }): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
 
     const filterPayload = this.filters.toPayload();
     const hasFilterKeys = Object.keys(filterPayload).length > 0;
+
+    // Claim "playing" synchronously so a second play() racing this one
+    // sees a non-idle status instead of starting a duplicate playback
+    const previousStatus = this._status;
+    this._status = "playing";
 
     try {
       const sessionId = this._node.rest.sessionId;
@@ -308,6 +340,7 @@ export class Player<TTrack extends TrackData = TrackData> {
         this.guildId,
         {
           track: { encoded: track.encoded },
+          position: options?.position,
           volume: this._volume,
           paused: this._paused,
           filters: hasFilterKeys ? filterPayload : undefined,
@@ -315,10 +348,8 @@ export class Player<TTrack extends TrackData = TrackData> {
         },
         false,
       );
-
-      this._status = "playing";
     } catch (error) {
-      this._status = "idle";
+      this._status = previousStatus === "playing" ? "idle" : previousStatus;
       throw error;
     }
   }
@@ -444,12 +475,67 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this;
   }
 
-  /** Updates associated voice channel ID */
+  /**
+   * Sends Discord OP4 to join the player's voice channel.
+   * Requires the `send` option on the YuKumo manager; a no-op otherwise
+   * (for setups where the host application dispatches OP4 itself).
+   */
+  public connect(options?: { selfDeaf?: boolean; selfMute?: boolean }): this {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    if (options?.selfDeaf != null) this._selfDeaf = options.selfDeaf;
+    if (options?.selfMute != null) this._selfMute = options.selfMute;
+    this.sendVoiceStateToDiscord(this._voiceChannelId);
+    return this;
+  }
+
+  /** Sends Discord OP4 to leave the voice channel (player itself stays alive) */
+  public disconnect(): this {
+    this.sendVoiceStateToDiscord(null);
+    return this;
+  }
+
+  private sendVoiceStateToDiscord(channelId: string | null): void {
+    const send = this.kumo.sendGatewayPayload;
+    if (send == null) return;
+    send(this.guildId, {
+      op: 4,
+      d: {
+        guild_id: this.guildId,
+        channel_id: channelId,
+        self_mute: this._selfMute,
+        self_deaf: this._selfDeaf,
+      },
+    });
+  }
+
+  /** Moves the player to another voice channel (sends OP4 when the manager has a `send` function) */
   public async setVoiceChannel(
     channelId: string,
-    _options?: { selfDeaf?: boolean; selfMute?: boolean },
+    options?: { selfDeaf?: boolean; selfMute?: boolean },
   ): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     this._voiceChannelId = channelId;
+    if (options?.selfDeaf != null) this._selfDeaf = options.selfDeaf;
+    if (options?.selfMute != null) this._selfMute = options.selfMute;
+    this.sendVoiceStateToDiscord(channelId);
+  }
+
+  /**
+   * Pushes the current voice credentials to Lavalink immediately.
+   * Called when Discord delivers new voice server credentials (initial join,
+   * region change, session change) so audio survives without waiting for the next play().
+   */
+  public async sendVoiceUpdate(): Promise<void> {
+    if (this._destroyed) return;
+    const { token, endpoint, sessionId: voiceSessionId } = this._voiceState;
+    if (!token || !endpoint || !voiceSessionId) return;
+
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId == null) return;
+
+    await this._node.rest.updatePlayer(sessionId, this.guildId, {
+      voice: { token, endpoint, sessionId: voiceSessionId },
+    });
   }
 
   /** Replaces complete internal voice connection state */
@@ -462,8 +548,10 @@ export class Player<TTrack extends TrackData = TrackData> {
     Object.assign(this._voiceState, partial);
   }
 
-  /** Destroys player, clears queue and filters, and removes event listeners */
+  /** Destroys player, leaves the voice channel, clears queue and filters, and removes event listeners */
   public async destroy(): Promise<void> {
+    if (this._destroyed) return;
+    this.sendVoiceStateToDiscord(null);
     this._destroyed = true;
     this._status = "destroyed";
     this.removeNodeListeners();

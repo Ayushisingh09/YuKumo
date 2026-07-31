@@ -1,5 +1,5 @@
 {
-  "name": "YuKumo-example-discordjs",
+  "name": "yukumo-example-discordjs",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "discord.js": "^14.0.0",
-    "YuKumo": "file:../.."
+    "yukumo": "file:../.."
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

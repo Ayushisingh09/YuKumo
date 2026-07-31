@@ -19,6 +19,7 @@ export class PlayerManager {
     const playerOptions: PlayerOptions = { ...options, kumo: this.kumo };
     const player = new Player(playerOptions);
     this.players.set(options.guildId, player);
+    options.node.playerCount += 1;
     return player;
   }
 
@@ -36,6 +37,7 @@ export class PlayerManager {
 
     await player.destroy();
     this.players.delete(guildId);
+    player.node.playerCount = Math.max(0, player.node.playerCount - 1);
     return true;
   }
 

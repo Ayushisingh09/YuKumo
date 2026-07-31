@@ -12,9 +12,9 @@ export interface RedisStorageOptions {
 type RedisClient = {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<unknown>;
-  del(key: string): Promise<number>;
+  del(key: string | string[]): Promise<number>;
   exists(key: string): Promise<number>;
-  flushdb(): Promise<unknown>;
+  scanIterator(options: { MATCH: string; COUNT: number }): AsyncIterable<string | string[]>;
   quit(): Promise<unknown>;
 };
 
@@ -101,7 +101,24 @@ export class RedisStorage implements StorageAdapter {
 
   public async clear(): Promise<void> {
     if (this.client == null) throw new Error("Redis not connected");
-    await this.client.flushdb();
+
+    // Delete only keys under our prefix — FLUSHDB would wipe unrelated data
+    // from applications sharing the same Redis database
+    const batch: string[] = [];
+    for await (const key of this.client.scanIterator({ MATCH: `${this.prefix}*`, COUNT: 250 })) {
+      // node-redis v4 yields strings; v5 yields string arrays
+      if (Array.isArray(key)) {
+        batch.push(...key);
+      } else {
+        batch.push(key);
+      }
+      if (batch.length >= 250) {
+        await this.client.del(batch.splice(0, batch.length));
+      }
+    }
+    if (batch.length > 0) {
+      await this.client.del(batch);
+    }
   }
 
   public async disconnect(): Promise<void> {

@@ -1,5 +1,5 @@
 {
-  "name": "YuKumo-example-discordeno",
+  "name": "yukumo-example-discordeno",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@discordeno/bot": "^19.0.0",
-    "YuKumo": "file:../.."
+    "yukumo": "file:../.."
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

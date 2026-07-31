@@ -63,13 +63,20 @@ export class WebSocketClient {
     return this;
   }
 
+  /** Node identifier used in emitted events: configured name, falling back to host:port */
+  private get nodeId(): string {
+    const { name, host, port } = this.options.nodeConfig;
+    return name ?? `${host}:${port}`;
+  }
+
   private get reconnectDelay(): number {
     const { maxRetries = 5, retryDelay = 1000, retryDelayMax = 30000 } = this.options.nodeConfig;
     if (this.reconnectAttempts >= maxRetries) {
       return -1;
     }
-    const delay = Math.min(retryDelay * 2 ** this.reconnectAttempts, retryDelayMax);
-    return delay;
+    const base = Math.min(retryDelay * 2 ** this.reconnectAttempts, retryDelayMax);
+    // Half-jitter: avoids synchronized reconnect waves across nodes/shards
+    return base / 2 + Math.random() * (base / 2);
   }
 
   public async connect(): Promise<void> {
@@ -84,7 +91,7 @@ export class WebSocketClient {
     this._state = "connecting";
     this.destroyRequested = false;
 
-    const { host, port, password, secure, resumeKey } = this.options.nodeConfig;
+    const { host, port, password, secure, resumeKey, connectTimeout = 15000 } = this.options.nodeConfig;
     const protocol = secure === true ? "wss" : "ws";
     const url = `${protocol}://${host}:${port}/v4/websocket`;
 
@@ -106,48 +113,82 @@ export class WebSocketClient {
     const instance = new (WSClass as any)(url, { headers });
     this.ws = instance;
 
-    const handleOpen = () => {
-      this._state = "connected";
-      this.reconnectAttempts = 0;
-      this.events.emit("debug", `WebSocket connected to ${host}:${port}`);
-    };
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Connection to ${host}:${port} timed out after ${connectTimeout}ms`));
+        }
+      }, connectTimeout);
+      // Don't keep the process alive just for the connect timeout
+      (timer as { unref?: () => void }).unref?.();
 
-    const handleMsg = (event: any) => {
-      const data =
-        typeof event === "string" || Buffer.isBuffer(event)
-          ? event.toString()
-          : event?.data != null
-            ? String(event.data)
-            : String(event);
-      this.handleMessage(data);
-    };
+      const handleOpen = () => {
+        const wasReconnect = this.reconnectAttempts > 0;
+        this._state = "connected";
+        this.reconnectAttempts = 0;
+        this.events.emit("debug", `WebSocket connected to ${host}:${port}`);
+        if (wasReconnect) {
+          this.events.emit("nodeReconnected", this.nodeId);
+        }
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      };
 
-    const handleClose = (event: any) => {
-      const code = typeof event === "number" ? event : (event?.code ?? 1000);
-      const reason = event?.reason != null ? String(event.reason) : "";
-      this._state = "disconnected";
-      this.events.emit("debug", `WebSocket closed: code=${code} reason=${reason}`);
+      const handleMsg = (event: any) => {
+        const data =
+          typeof event === "string" || Buffer.isBuffer(event)
+            ? event.toString()
+            : event?.data != null
+              ? String(event.data)
+              : String(event);
+        this.handleMessage(data);
+      };
 
-      if (!this.destroyRequested) {
-        this.scheduleReconnect();
+      const handleClose = (event: any) => {
+        const code = typeof event === "number" ? event : (event?.code ?? 1000);
+        const reason = event?.reason != null ? String(event.reason) : "";
+        this._state = "disconnected";
+        this.events.emit("debug", `WebSocket closed: code=${code} reason=${reason}`);
+        this.events.emit("nodeDisconnected", this.nodeId, code, reason);
+
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error(`WebSocket to ${host}:${port} closed before opening: code=${code}`));
+        }
+
+        if (!this.destroyRequested) {
+          this.scheduleReconnect();
+        }
+      };
+
+      const handleError = (err: any) => {
+        const error =
+          err instanceof Error ? err : new Error(String(err?.message ?? err ?? "WebSocket error"));
+        this.events.emit("debug", `WebSocket error on ${host}:${port}: ${error.message}`);
+        this.events.emit("nodeError", this.nodeId, error);
+        // The ws implementation emits "close" after "error"; rejection happens there
+      };
+
+      // Register through exactly one mechanism — dual registration would parse and
+      // dispatch every message twice and double-run reconnect bookkeeping
+      if (typeof instance.on === "function") {
+        instance.on("open", handleOpen);
+        instance.on("message", (data: any) => handleMsg(data));
+        instance.on("close", (code: number, reason: any) => handleClose({ code, reason }));
+        instance.on("error", (err: any) => handleError(err));
+      } else {
+        instance.onopen = handleOpen;
+        instance.onmessage = handleMsg;
+        instance.onclose = handleClose;
+        instance.onerror = handleError;
       }
-    };
-
-    const handleError = (_event: any) => {
-      this.events.emit("debug", `WebSocket error on ${host}:${port}`);
-    };
-
-    instance.onopen = handleOpen;
-    instance.onmessage = handleMsg;
-    instance.onclose = handleClose;
-    instance.onerror = handleError;
-
-    if (typeof instance.on === "function") {
-      instance.on("open", handleOpen);
-      instance.on("message", (data: any) => handleMsg(data));
-      instance.on("close", (code: number, reason: any) => handleClose({ code, reason }));
-      instance.on("error", (err: any) => handleError(err));
-    }
+    });
   }
 
   private handleMessage(data: string): void {
@@ -171,9 +212,7 @@ export class WebSocketClient {
           `Received ready: resumed=${payload.resumed} sessionId=${payload.sessionId}`,
         );
 
-        if (this.options.nodeConfig.name != null) {
-          this.events.emit("nodeReady", this.options.nodeConfig.name);
-        }
+        this.events.emit("nodeReady", this.nodeId);
         break;
       }
 
@@ -194,9 +233,7 @@ export class WebSocketClient {
           frameStats: payload.frameStats,
         };
 
-        if (this.options.nodeConfig.name != null) {
-          this.events.emit("stats", this.options.nodeConfig.name, stats);
-        }
+        this.events.emit("stats", this.nodeId, stats);
         break;
       }
 
@@ -245,12 +282,27 @@ export class WebSocketClient {
     }
   }
 
+  /** Resets the retry counter and forces a new connection attempt (e.g. after max retries were exhausted) */
+  public async reconnect(): Promise<void> {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempts = 0;
+    await this.connect();
+  }
+
   private scheduleReconnect(): void {
     if (this.destroyRequested) return;
 
     const delay = this.reconnectDelay;
     if (delay < 0) {
       this.events.emit("debug", "Max reconnection attempts reached");
+      this.events.emit(
+        "nodeError",
+        this.nodeId,
+        new Error(`Gave up reconnecting to ${this.nodeId} after ${this.reconnectAttempts} attempts`),
+      );
       return;
     }
 
@@ -274,6 +326,35 @@ export class WebSocketClient {
     this.ws.send(data);
   }
 
+  private teardownSocket(closeReason: string): void {
+    if (this.ws === null) return;
+
+    this.ws.onclose = null;
+    this.ws.onerror = null;
+    this.ws.onmessage = null;
+    this.ws.onopen = null;
+    // Listeners registered via .on() (ws package) survive nulling the on* properties
+    (this.ws as { removeAllListeners?: () => void }).removeAllListeners?.();
+
+    try {
+      if (this.ws.readyState === 0) {
+        // CONNECTING sockets close faster with terminate() where available
+        const terminate = (this.ws as { terminate?: () => void }).terminate;
+        if (typeof terminate === "function") {
+          terminate.call(this.ws);
+        } else {
+          this.ws.close(1000, closeReason);
+        }
+      } else if (this.ws.readyState === 1) {
+        this.ws.close(1000, closeReason);
+      }
+    } catch {
+      // ignore
+    }
+
+    this.ws = null;
+  }
+
   public async close(): Promise<void> {
     this.destroyRequested = true;
 
@@ -282,23 +363,7 @@ export class WebSocketClient {
       this.reconnectTimer = null;
     }
 
-    if (this.ws !== null) {
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      this.ws.onopen = null;
-
-      if (this.ws.readyState === 1 || this.ws.readyState === 0) {
-        try {
-          this.ws.close(1000, "Client shutdown");
-        } catch {
-          // ignore
-        }
-      }
-
-      this.ws = null;
-    }
-
+    this.teardownSocket("Client shutdown");
     this._state = "disconnected";
     this.events.removeAllListeners();
   }
@@ -312,23 +377,7 @@ export class WebSocketClient {
       this.reconnectTimer = null;
     }
 
-    if (this.ws !== null) {
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      this.ws.onopen = null;
-
-      if (this.ws.readyState === 1 || this.ws.readyState === 0) {
-        try {
-          this.ws.close(1000, "Destroy");
-        } catch {
-          // ignore
-        }
-      }
-
-      this.ws = null;
-    }
-
+    this.teardownSocket("Destroy");
     this.events.removeAllListeners();
   }
 }

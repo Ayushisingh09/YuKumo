@@ -14,7 +14,7 @@
 
 <br />
 
-YuKumo is a zero-dependency client library built to interface seamlessly with **Lavalink v4** audio servers. It treats JavaScript (CommonJS & ESM) and TypeScript as equal first-class targets — JSDoc-powered autocomplete for JS consumers, and strict, fully-generic typing with zero `any` for TS projects.
+YuKumo is a lightweight client library built to interface seamlessly with **Lavalink v4** audio servers. It treats JavaScript (CommonJS & ESM) and TypeScript as equal first-class targets — JSDoc-powered autocomplete for JS consumers, and strict, fully-generic typing with zero `any` for TS projects.
 
 Built for production: multi-node load balancing, automatic failover, distributed state via Redis, and OpenMetrics observability out of the box.
 

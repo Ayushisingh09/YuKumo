@@ -26,7 +26,6 @@ export class Node {
   public readonly ws: WebSocketClient;
   public readonly rest: RestClient;
   private readonly events: EventDispatcher;
-  private _state: NodeState = "disconnected";
   private _stats: NodeStats | null = null;
   private _ping: number | null = null;
   private _penalties: PenaltyScore = {
@@ -69,6 +68,21 @@ export class Node {
     this.ws.eventDispatcher.on("nodeReady", () => {
       if (this.ws.sessionId) {
         this.rest.sessionId = this.ws.sessionId;
+
+        // Lavalink only honors Session-Id on reconnect if resuming was enabled beforehand
+        if (config.resumeKey != null) {
+          this.rest
+            .updateSession(this.ws.sessionId, {
+              resuming: true,
+              timeout: config.resumeTimeout ?? 60,
+            })
+            .catch((error: unknown) => {
+              this.events.emit(
+                "debug",
+                `Failed to enable session resuming on ${this.id}: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            });
+        }
       }
     });
 
@@ -98,9 +112,12 @@ export class Node {
     this.ws.setUserId(userId);
   }
 
-  /** Gets the current connection state of the node */
+  /**
+   * Gets the current connection state of the node.
+   * Delegates to the WebSocket so unexpected drops and auto-reconnects are reflected immediately.
+   */
   public get state(): NodeState {
-    return this._state;
+    return this.ws.state;
   }
 
   /** Gets the latest node statistics */
@@ -162,27 +179,18 @@ export class Node {
     };
   }
 
-  /** Initiates WebSocket connection to the Lavalink node */
+  /** Initiates WebSocket connection to the Lavalink node; resolves once the socket is open */
   public async connect(): Promise<void> {
-    this._state = "connecting";
-    try {
-      await this.ws.connect();
-      this._state = "connected";
-    } catch (error) {
-      this._state = "disconnected";
-      throw error;
-    }
+    await this.ws.connect();
   }
 
   /** Closes the WebSocket connection */
   public async close(): Promise<void> {
-    this._state = "disconnected";
     await this.ws.close();
   }
 
   /** Destroys the node instance and cleans up event listeners */
   public destroy(): void {
-    this._state = "destroyed";
     this.ws.destroy();
     this.events.removeAllListeners();
   }

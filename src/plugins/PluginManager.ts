@@ -19,6 +19,15 @@ export class PluginManager {
     onNodeSelect: [],
   };
 
+  private readonly pendingInits: Promise<void>[] = [];
+
+  /**
+   * Called whenever a plugin init or lifecycle hook throws. YuKumo routes this
+   * into its debug event stream; a failing hook is skipped instead of aborting
+   * the core operation that triggered it.
+   */
+  public onPluginError?: (source: string, error: unknown) => void;
+
   public register(plugin: Plugin): void {
     if (this.plugins.has(plugin.name)) {
       throw new PluginError(`Plugin "${plugin.name}" is already registered`, plugin.name);
@@ -27,7 +36,28 @@ export class PluginManager {
     this.plugins.set(plugin.name, plugin);
 
     if (plugin.init != null) {
-      this.callInit(plugin);
+      // Track the async init so failures surface through ready()/startAll()
+      // instead of becoming unhandled rejections; a failed plugin is deregistered
+      const initPromise = this.callInit(plugin).catch((error: unknown) => {
+        this.plugins.delete(plugin.name);
+        this.onPluginError?.(`init:${plugin.name}`, error);
+        throw error;
+      });
+      initPromise.catch(() => {
+        // handled via ready(); this guard prevents an unhandled rejection
+      });
+      this.pendingInits.push(initPromise);
+    }
+  }
+
+  /** Resolves when all registered plugin inits have settled; throws the first init failure */
+  public async ready(): Promise<void> {
+    if (this.pendingInits.length === 0) return;
+    const results = await Promise.allSettled(this.pendingInits);
+    this.pendingInits.length = 0;
+    const failure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failure != null) {
+      throw failure.reason;
     }
   }
 
@@ -52,6 +82,7 @@ export class PluginManager {
   }
 
   public async startAll(): Promise<void> {
+    await this.ready();
     for (const plugin of this.plugins.values()) {
       if (plugin.start != null) {
         try {
@@ -98,15 +129,30 @@ export class PluginManager {
     }
   }
 
+  /**
+   * Runs a single hook handler, isolating failures: a throwing handler is
+   * reported via onPluginError and skipped so it can't abort the core
+   * operation (play, destroy, connect) that triggered the pipeline.
+   */
+  private async runIsolated<R>(hook: string, fn: () => R | Promise<R>): Promise<{ ok: true; value: Awaited<R> } | { ok: false }> {
+    try {
+      return { ok: true, value: await fn() };
+    } catch (error) {
+      this.onPluginError?.(hook, error);
+      return { ok: false };
+    }
+  }
+
   public async runBeforeSearch(
     query: string,
     source?: string,
   ): Promise<{ query: string; source?: string } | null> {
     let current: { query: string; source?: string } = { query, source };
     for (const handler of this.hookHandlers.beforeSearch) {
-      const result = await handler(current.query, current.source);
-      if (result === null) return null;
-      current = result;
+      const result = await this.runIsolated("beforeSearch", () => handler(current.query, current.source));
+      if (!result.ok) continue;
+      if (result.value === null) return null;
+      current = result.value;
     }
     return current;
   }
@@ -114,9 +160,10 @@ export class PluginManager {
   public async runAfterSearch(result: SearchResult): Promise<SearchResult | null> {
     let current = result;
     for (const handler of this.hookHandlers.afterSearch) {
-      const modified = await handler(current);
-      if (modified === null) return null;
-      current = modified;
+      const outcome = await this.runIsolated("afterSearch", () => handler(current));
+      if (!outcome.ok) continue;
+      if (outcome.value === null) return null;
+      current = outcome.value;
     }
     return current;
   }
@@ -127,53 +174,57 @@ export class PluginManager {
   ): Promise<{ guildId: string; channelId: string } | null> {
     let current = { guildId, channelId };
     for (const handler of this.hookHandlers.beforeConnect) {
-      const result = await handler(current.guildId, current.channelId);
-      if (result === null) return null;
-      current = result;
+      const result = await this.runIsolated("beforeConnect", () => handler(current.guildId, current.channelId));
+      if (!result.ok) continue;
+      if (result.value === null) return null;
+      current = result.value;
     }
     return current;
   }
 
   public async runAfterConnect(guildId: string, channelId: string): Promise<void> {
     for (const handler of this.hookHandlers.afterConnect) {
-      await handler(guildId, channelId);
+      await this.runIsolated("afterConnect", () => handler(guildId, channelId));
     }
   }
 
   public async runBeforePlay(guildId: string, track: TrackData): Promise<TrackData | null> {
     let current = track;
     for (const handler of this.hookHandlers.beforePlay) {
-      const result = await handler(guildId, current);
-      if (result === null) return null;
-      current = result;
+      const result = await this.runIsolated("beforePlay", () => handler(guildId, current));
+      if (!result.ok) continue;
+      if (result.value === null) return null;
+      current = result.value;
     }
     return current;
   }
 
   public async runAfterPlay(guildId: string, track: TrackData): Promise<void> {
     for (const handler of this.hookHandlers.afterPlay) {
-      await handler(guildId, track);
+      await this.runIsolated("afterPlay", () => handler(guildId, track));
     }
   }
 
   public async runBeforeDestroy(guildId: string): Promise<boolean> {
     for (const handler of this.hookHandlers.beforeDestroy) {
-      const shouldContinue = await handler(guildId);
-      if (!shouldContinue) return false;
+      const result = await this.runIsolated("beforeDestroy", () => handler(guildId));
+      if (!result.ok) continue;
+      if (!result.value) return false;
     }
     return true;
   }
 
   public async runAfterDestroy(guildId: string): Promise<void> {
     for (const handler of this.hookHandlers.afterDestroy) {
-      await handler(guildId);
+      await this.runIsolated("afterDestroy", () => handler(guildId));
     }
   }
 
   public async runOnNodeSelect(guildId: string, availableNodes: string[]): Promise<string | null> {
     for (const handler of this.hookHandlers.onNodeSelect) {
-      const result = await handler(guildId, availableNodes);
-      if (result != null) return result;
+      const result = await this.runIsolated("onNodeSelect", () => handler(guildId, availableNodes));
+      if (!result.ok) continue;
+      if (result.value != null) return result.value;
     }
     return null;
   }

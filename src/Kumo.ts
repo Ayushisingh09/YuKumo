@@ -17,6 +17,7 @@ import type {
   StorageAdapter,
   VoiceStateUpdate,
   VoiceServerUpdate,
+  VoiceGatewayPayload,
   EventName,
   EventCallback,
 } from "./types/internal.ts";
@@ -109,10 +110,14 @@ export class YuKumo {
   public readonly voice: VoiceStateTracker;
   public readonly searchCache: SearchCache;
   public defaultSearchSource: string;
+  /** User-provided Discord gateway dispatcher for OP4 voice payloads (see ManagerOptions.send) */
+  public readonly sendGatewayPayload?: (guildId: string, payload: VoiceGatewayPayload) => void;
   private _userId: string;
+  private readonly pendingPlayerCreates = new Map<string, Promise<Player>>();
 
   public constructor(options: ManagerOptions) {
     this._userId = options.userId ?? "";
+    this.sendGatewayPayload = options.send;
     this.defaultSearchSource = options.defaultSearchSource ?? "ytsearch";
     this.storage = options.storageAdapter ?? new MemoryStorage();
     this.events = new EventDispatcher();
@@ -121,6 +126,12 @@ export class YuKumo {
     this.nodes = new NodeManager(this._userId);
     this.players = new PlayerManager(this);
     this.plugins = new PluginManager();
+    this.plugins.onPluginError = (source, error) => {
+      this.events.emit(
+        "debug",
+        `Plugin error in ${source}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    };
 
     this.registerNodes(options.nodes);
     this.registerPlugins(options.plugins);
@@ -138,13 +149,22 @@ export class YuKumo {
     await this.plugins.startAll();
   }
 
-  /** Destroys all players, closes node WS connections, and cleans up event listeners */
+  /** Destroys all players, closes node WS connections, and cleans up event listeners, caches, and storage */
   public async destroy(): Promise<void> {
     await this.players.destroyAll();
     await this.nodes.destroyAll();
     await this.plugins.destroyAll();
     for (const guildId of this.voice.getAll().map((s) => s.guildId)) {
       this.voice.remove(guildId);
+    }
+    this.searchCache.clear();
+    this.pendingPlayerCreates.clear();
+    if (typeof this.storage.disconnect === "function") {
+      try {
+        await this.storage.disconnect();
+      } catch {
+        // storage teardown failures shouldn't block shutdown
+      }
     }
     this.events.removeAllListeners();
   }
@@ -163,6 +183,15 @@ export class YuKumo {
       return { loadType: "empty", tracks: [] };
     }
 
+    const identifier = buildIdentifier(hookResult.query, hookResult.source, this.defaultSearchSource);
+
+    // Cache first — a hit needs no node, so don't waste a load-balancer pick
+    // (and cached queries keep working while all nodes are down)
+    const cached = this.searchCache.get<SearchResult>(identifier);
+    if (cached != null) {
+      return cached;
+    }
+
     const nodeName = resolved.nodeName;
     const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(resolved.query);
     if (node == null) {
@@ -170,13 +199,6 @@ export class YuKumo {
     }
 
     try {
-      const identifier = buildIdentifier(hookResult.query, hookResult.source, this.defaultSearchSource);
-      
-      const cached = this.searchCache.get<SearchResult>(identifier);
-      if (cached != null) {
-        return cached;
-      }
-
       const result = await node.rest.loadTracks(identifier);
       const searchResult = loadResultToSearchResult(result);
 
@@ -223,9 +245,14 @@ export class YuKumo {
     if (node == null) {
       return {};
     }
-    const result = await node.rest.lavaSearch(query, types);
-    this.searchCache.set(cacheKey, result);
-    return result;
+    try {
+      const result = await node.rest.lavaSearch(query, types);
+      this.searchCache.set(cacheKey, result);
+      return result;
+    } catch (err: unknown) {
+      this.events.emit("debug", `lavaSearch failed: ${err instanceof Error ? err.message : String(err)}`);
+      return {};
+    }
   }
 
   /**
@@ -237,7 +264,12 @@ export class YuKumo {
   public async getLyrics(encodedTrack: string, nodeName?: string): Promise<any> {
     const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(encodedTrack);
     if (node == null) return null;
-    return node.rest.getLyrics(encodedTrack);
+    try {
+      return await node.rest.getLyrics(encodedTrack);
+    } catch (err: unknown) {
+      this.events.emit("debug", `getLyrics failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   /**
@@ -248,6 +280,19 @@ export class YuKumo {
     const existing = this.players.get(options.guildId);
     if (existing != null) return existing;
 
+    // Concurrent calls for the same guild await the same in-flight creation instead of
+    // racing past the existence check (which would duplicate events and listeners)
+    const pending = this.pendingPlayerCreates.get(options.guildId);
+    if (pending != null) return pending;
+
+    const creation = this.doCreatePlayer(options).finally(() => {
+      this.pendingPlayerCreates.delete(options.guildId);
+    });
+    this.pendingPlayerCreates.set(options.guildId, creation);
+    return creation;
+  }
+
+  private async doCreatePlayer(options: YuKumoPlayerCreateOptions): Promise<Player> {
     const hookResult = await this.plugins.runBeforeConnect(options.guildId, options.voiceChannelId);
     if (hookResult === null) {
       throw new PluginError(
@@ -271,10 +316,15 @@ export class YuKumo {
       selfMute: options.selfMute,
     });
 
+    player.events.on("queueEnd", (guildId: string) => this.events.emit("queueEnd", guildId));
+
+    // Join the voice channel right away when the manager can dispatch OP4
+    if (this.sendGatewayPayload != null) {
+      player.connect();
+    }
+
     this.events.emit("playerCreate", options.guildId);
     await this.plugins.runAfterConnect(options.guildId, options.voiceChannelId);
-
-    player.events.on("queueEnd", (guildId: string) => this.events.emit("queueEnd", guildId));
 
     return player;
   }
@@ -363,6 +413,12 @@ export class YuKumo {
 
   /** Processes raw Discord VOICE_STATE_UPDATE gateway event */
   public async handleVoiceStateUpdate(data: VoiceStateUpdate): Promise<void> {
+    // Only the bot's own voice state matters — without this filter, any guild
+    // member leaving voice would destroy the player and overwrite the session ID
+    if (data.userId != null && this._userId !== "" && data.userId !== this._userId) {
+      return;
+    }
+
     this.voice.handleVoiceStateUpdate(data);
 
     const player = this.players.get(data.guildId);
@@ -373,8 +429,6 @@ export class YuKumo {
       return;
     }
 
-    if (data.userId == null) return;
-    
     if (player.voiceChannelId !== data.channelId) {
       const oldChannel = player.voiceChannelId;
       await player.setVoiceChannel(data.channelId);
@@ -382,6 +436,12 @@ export class YuKumo {
     }
 
     player.updateVoiceState({ sessionId: data.sessionId, channelId: data.channelId });
+    await player.sendVoiceUpdate().catch((err: unknown) => {
+      this.events.emit(
+        "debug",
+        `Failed to push voice update for guild ${data.guildId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /** Processes raw Discord VOICE_SERVER_UPDATE gateway event */
@@ -392,6 +452,13 @@ export class YuKumo {
     if (player == null) return;
 
     player.updateVoiceState({ token: data.token, endpoint: data.endpoint });
+    // Push fresh credentials immediately so region changes mid-playback don't kill audio
+    await player.sendVoiceUpdate().catch((err: unknown) => {
+      this.events.emit(
+        "debug",
+        `Failed to push voice update for guild ${guildId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /** Gets player for a guild */

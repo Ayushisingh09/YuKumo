@@ -1,5 +1,5 @@
 {
-  "name": "YuKumo-example-eris",
+  "name": "yukumo-example-eris",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "eris": "^0.17.0",
-    "YuKumo": "file:../.."
+    "yukumo": "file:../.."
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
