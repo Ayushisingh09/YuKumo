@@ -89,7 +89,8 @@ export interface InternalVoiceState {
 
 export interface VoiceServerUpdate {
   token: string;
-  endpoint: string;
+  /** Null while Discord allocates a new voice region — hold until a real endpoint arrives */
+  endpoint: string | null;
 }
 
 export interface VoiceStateUpdate {

@@ -114,6 +114,7 @@ export class YuKumo {
   public readonly sendGatewayPayload?: (guildId: string, payload: VoiceGatewayPayload) => void;
   private _userId: string;
   private readonly pendingPlayerCreates = new Map<string, Promise<Player>>();
+  private readonly adapters = new Set<{ destroy(): void }>();
 
   public constructor(options: ManagerOptions) {
     this._userId = options.userId ?? "";
@@ -137,6 +138,11 @@ export class YuKumo {
     this.registerPlugins(options.plugins);
   }
 
+  /** Registers an adapter for automatic listener teardown when this manager is destroyed */
+  public registerAdapter(adapter: { destroy(): void }): void {
+    this.adapters.add(adapter);
+  }
+
   /** Sets the Discord Bot User ID for node handshakes */
   public setUserId(userId: string): void {
     this._userId = userId;
@@ -151,6 +157,14 @@ export class YuKumo {
 
   /** Destroys all players, closes node WS connections, and cleans up event listeners, caches, and storage */
   public async destroy(): Promise<void> {
+    for (const adapter of this.adapters) {
+      try {
+        adapter.destroy();
+      } catch {
+        // adapter teardown failures shouldn't block shutdown
+      }
+    }
+    this.adapters.clear();
     await this.players.destroyAll();
     await this.nodes.destroyAll();
     await this.plugins.destroyAll();
