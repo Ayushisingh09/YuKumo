@@ -52,14 +52,17 @@ export class SearchCache {
    * @param data The result to cache
    */
   public set(key: string, data: SearchResult | LavaSearchResult): void {
-    if (this.cache.size >= this.maxSize) {
-      // Delete oldest entry (first item in Map)
+    // Only evict when inserting a genuinely new key at capacity —
+    // overwriting an existing key doesn't grow the map
+    if (!this.cache.has(key) && this.cache.size >= this.maxSize) {
       const oldestKey = this.cache.keys().next().value;
       if (oldestKey) {
         this.cache.delete(oldestKey);
       }
     }
 
+    // Delete-then-set refreshes the key's LRU position on overwrite
+    this.cache.delete(key);
     this.cache.set(key, {
       data,
       expiresAt: Date.now() + this.ttl,
