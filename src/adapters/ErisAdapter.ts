@@ -2,6 +2,7 @@ import type { YuKumo } from "../Kumo.ts";
 
 export interface MinimalErisClient {
   on(event: "rawWS", listener: (packet: { t: string; d: Record<string, unknown> }) => void): unknown;
+  off?(event: "rawWS", listener: (packet: { t: string; d: Record<string, unknown> }) => void): unknown;
   getGuildShard(guildId: string): { sendWS(op: number, data: unknown): void } | undefined;
 }
 
@@ -12,33 +13,37 @@ export class ErisAdapter {
   private readonly client: MinimalErisClient;
   private readonly kumo: YuKumo;
 
+  private readonly rawListener = (packet: { t: string; d: Record<string, unknown> }): void => {
+    if (!packet || !packet.t || !packet.d) return;
+
+    if (packet.t === "VOICE_STATE_UPDATE") {
+      const d = packet.d;
+      this.kumo.handleVoiceStateUpdate({
+        guildId: String(d.guild_id ?? ""),
+        sessionId: String(d.session_id ?? ""),
+        channelId: d.channel_id != null ? String(d.channel_id) : null,
+        userId: String(d.user_id ?? ""),
+      });
+    } else if (packet.t === "VOICE_SERVER_UPDATE") {
+      const d = packet.d;
+      this.kumo.handleVoiceServerUpdate(String(d.guild_id ?? ""), {
+        token: String(d.token ?? ""),
+        endpoint: d.endpoint != null ? String(d.endpoint) : null,
+      });
+    }
+  };
+
   public constructor(client: MinimalErisClient, kumo: YuKumo) {
     this.client = client;
     this.kumo = kumo;
 
-    this.setupListeners();
+    this.client.on("rawWS", this.rawListener);
+    this.kumo.registerAdapter(this);
   }
 
-  private setupListeners(): void {
-    this.client.on("rawWS", (packet: { t: string; d: Record<string, unknown> }) => {
-      if (!packet || !packet.t || !packet.d) return;
-
-      if (packet.t === "VOICE_STATE_UPDATE") {
-        const d = packet.d;
-        this.kumo.handleVoiceStateUpdate({
-          guildId: String(d.guild_id ?? ""),
-          sessionId: String(d.session_id ?? ""),
-          channelId: d.channel_id != null ? String(d.channel_id) : null,
-          userId: String(d.user_id ?? ""),
-        });
-      } else if (packet.t === "VOICE_SERVER_UPDATE") {
-        const d = packet.d;
-        this.kumo.handleVoiceServerUpdate(String(d.guild_id ?? ""), {
-          token: String(d.token ?? ""),
-          endpoint: String(d.endpoint ?? ""),
-        });
-      }
-    });
+  /** Detaches the rawWS gateway listener; called automatically by YuKumo.destroy() */
+  public destroy(): void {
+    this.client.off?.("rawWS", this.rawListener);
   }
 
   /**
