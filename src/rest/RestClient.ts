@@ -403,4 +403,3 @@ export class RestClient {
     return this.request<LavaSearchResult>("GET", "/lavasearch", undefined, params);
   }
 }
-

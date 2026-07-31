@@ -38,7 +38,12 @@ export class OceanicAdapter {
     }
   }
 
-  public sendVoiceStateUpdate(guildId: string, channelId: string | null, selfDeaf = true, selfMute = false): void {
+  public sendVoiceStateUpdate(
+    guildId: string,
+    channelId: string | null,
+    selfDeaf = true,
+    selfMute = false,
+  ): void {
     const guild = this.client?.guilds?.get?.(guildId);
     if (guild && typeof guild.shard?.send === "function") {
       guild.shard.send(4, {

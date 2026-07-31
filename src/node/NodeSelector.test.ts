@@ -90,10 +90,24 @@ describe("NodeSelector", () => {
       Object.defineProperty(node2, "state", { value: "connected" });
 
       Object.defineProperty(node1, "stats", {
-        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 0, used: 0, allocated: 0, reservable: 0 }, cpu: { cores: 4, systemLoad: 0.5, lavalinkLoad: 0.8 }, frameStats: null },
+        value: {
+          players: 0,
+          playingPlayers: 0,
+          uptime: 0,
+          memory: { free: 0, used: 0, allocated: 0, reservable: 0 },
+          cpu: { cores: 4, systemLoad: 0.5, lavalinkLoad: 0.8 },
+          frameStats: null,
+        },
       });
       Object.defineProperty(node2, "stats", {
-        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 0, used: 0, allocated: 0, reservable: 0 }, cpu: { cores: 4, systemLoad: 0.2, lavalinkLoad: 0.1 }, frameStats: null },
+        value: {
+          players: 0,
+          playingPlayers: 0,
+          uptime: 0,
+          memory: { free: 0, used: 0, allocated: 0, reservable: 0 },
+          cpu: { cores: 4, systemLoad: 0.2, lavalinkLoad: 0.1 },
+          frameStats: null,
+        },
       });
 
       const result = selector.pick([node1, node2], "guild-1");
@@ -110,10 +124,24 @@ describe("NodeSelector", () => {
       Object.defineProperty(node2, "state", { value: "connected" });
 
       Object.defineProperty(node1, "stats", {
-        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 100, used: 800, allocated: 1000, reservable: 1000 }, cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 }, frameStats: null },
+        value: {
+          players: 0,
+          playingPlayers: 0,
+          uptime: 0,
+          memory: { free: 100, used: 800, allocated: 1000, reservable: 1000 },
+          cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 },
+          frameStats: null,
+        },
       });
       Object.defineProperty(node2, "stats", {
-        value: { players: 0, playingPlayers: 0, uptime: 0, memory: { free: 800, used: 200, allocated: 1000, reservable: 1000 }, cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 }, frameStats: null },
+        value: {
+          players: 0,
+          playingPlayers: 0,
+          uptime: 0,
+          memory: { free: 800, used: 200, allocated: 1000, reservable: 1000 },
+          cpu: { cores: 4, systemLoad: 0, lavalinkLoad: 0 },
+          frameStats: null,
+        },
       });
 
       const result = selector.pick([node1, node2], "guild-1");
@@ -196,4 +224,3 @@ describe("NodeSelector", () => {
     });
   });
 });
-

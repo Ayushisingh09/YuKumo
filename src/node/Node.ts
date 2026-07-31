@@ -93,7 +93,6 @@ export class Node {
     return this.id;
   }
 
-
   /** Sets the Discord bot User ID for WebSocket handshake */
   public setUserId(userId: string): void {
     this.ws.setUserId(userId);
@@ -188,4 +187,3 @@ export class Node {
     this.events.removeAllListeners();
   }
 }
-

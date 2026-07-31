@@ -76,4 +76,3 @@ export function isPromise(value: unknown): value is Promise<unknown> {
 }
 
 export { type Logger, ConsoleLogger } from "./Logger.ts";
-

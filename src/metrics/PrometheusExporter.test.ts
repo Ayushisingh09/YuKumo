@@ -9,9 +9,7 @@ import { DiscordenoAdapter } from "../adapters/DiscordenoAdapter.ts";
 describe("PrometheusExporter & Advanced Features", () => {
   it("PrometheusExporter should render openmetrics string", () => {
     const kumo = new YuKumo({
-      nodes: [
-        { host: "127.0.0.1", port: 2333, password: "test", name: "node-1" },
-      ],
+      nodes: [{ host: "127.0.0.1", port: 2333, password: "test", name: "node-1" }],
     });
 
     const exporter = new PrometheusExporter(kumo);

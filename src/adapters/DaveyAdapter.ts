@@ -2,15 +2,10 @@ import type { YuKumo } from "../Kumo.ts";
 import type { RawGatewayPacket } from "./RawGatewayAdapter.ts";
 
 export interface DaveyAdapterOptions {
-  /** Enables DAVE end-to-end encryption payload parsing */
   enableDave?: boolean;
-  /** DAVE protocol version override (default: 1) */
   daveVersion?: number;
 }
 
-/**
- * Specialized adapter integrating @snazzah/davey & DAVE E2EE voice protocol handshakes with Yukumo.
- */
 export class DaveyAdapter {
   private readonly kumo: YuKumo;
   public readonly options: DaveyAdapterOptions;
@@ -20,9 +15,6 @@ export class DaveyAdapter {
     this.options = { enableDave: true, daveVersion: 1, ...options };
   }
 
-  /**
-   * Processes gateway packets, parsing standard voice updates as well as DAVE E2EE metadata.
-   */
   public handleRawPacket(packet: RawGatewayPacket): void {
     if (!packet || !packet.t || !packet.d) return;
 
@@ -43,9 +35,6 @@ export class DaveyAdapter {
     }
   }
 
-  /**
-   * Generates Discord Voice State Update payload (Opcode 4) with DAVE compatibility flags.
-   */
   public buildVoiceStatePayload(
     guildId: string,
     channelId: string | null,

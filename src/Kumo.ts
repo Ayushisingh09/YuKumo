@@ -197,14 +197,17 @@ export class YuKumo {
    * @param types Optional array of search result categories to filter by
    * @param nodeName Optional specific node name to use
    */
-  public async lavaSearch(query: string, types?: LavaSearchType[], nodeName?: string): Promise<LavaSearchResult> {
+  public async lavaSearch(
+    query: string,
+    types?: LavaSearchType[],
+    nodeName?: string,
+  ): Promise<LavaSearchResult> {
     const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(query);
     if (node == null) {
       return {};
     }
     return node.rest.lavaSearch(query, types);
   }
-
 
   /**
    * Creates or gets a player for a guild.
@@ -216,7 +219,10 @@ export class YuKumo {
 
     const hookResult = await this.plugins.runBeforeConnect(options.guildId, options.voiceChannelId);
     if (hookResult === null) {
-      throw new PluginError(`Player creation for guild ${options.guildId} was cancelled by a plugin`, "YuKumo");
+      throw new PluginError(
+        `Player creation for guild ${options.guildId} was cancelled by a plugin`,
+        "YuKumo",
+      );
     }
 
     const nodeId = options.nodeId;
@@ -392,18 +398,22 @@ export class YuKumo {
     ws.on("nodeError", (nodeId: string, error: Error) => this.events.emit("nodeError", nodeId, error));
     ws.on("stats", (nodeId: string, stats: unknown) => this.events.emit("stats", nodeId, stats as never));
     ws.on("debug", (msg: string) => this.events.emit("debug", msg));
-    ws.on("trackStart", (guildId: string, track: TrackData) => this.events.emit("trackStart", guildId, track));
+    ws.on("trackStart", (guildId: string, track: TrackData) =>
+      this.events.emit("trackStart", guildId, track),
+    );
     ws.on("trackEnd", (guildId: string, track: TrackData, reason: string) =>
-      this.events.emit("trackEnd", guildId, track, reason)
+      this.events.emit("trackEnd", guildId, track, reason),
     );
     ws.on("trackStuck", (guildId: string, track: TrackData, thresholdMs: number) =>
-      this.events.emit("trackStuck", guildId, track, thresholdMs)
+      this.events.emit("trackStuck", guildId, track, thresholdMs),
     );
     ws.on("trackException", (guildId: string, track: TrackData, exception: unknown) =>
-      this.events.emit("trackException", guildId, track, exception)
+      this.events.emit("trackException", guildId, track, exception),
     );
-    ws.on("playerUpdate", (guildId: string, state: { time: number; position: number; connected: boolean; ping: number }) =>
-      this.events.emit("playerUpdate", guildId, state)
+    ws.on(
+      "playerUpdate",
+      (guildId: string, state: { time: number; position: number; connected: boolean; ping: number }) =>
+        this.events.emit("playerUpdate", guildId, state),
     );
   }
 
@@ -442,4 +452,3 @@ export class YuKumo {
     }
   }
 }
-

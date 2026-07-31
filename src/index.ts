@@ -15,5 +15,3 @@ export * from "./voice/index.ts";
 export * from "./adapters/index.ts";
 export * from "./metrics/PrometheusExporter.ts";
 export * from "./Kumo.ts";
-
-

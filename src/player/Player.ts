@@ -165,9 +165,25 @@ export class Player<TTrack extends TrackData = TrackData> {
       return;
     }
 
-    if (this.autoplay && this.autoplayFetcher != null) {
+    if (this.autoplay) {
       try {
-        const autoTrack = await this.autoplayFetcher(lastTrack);
+        let autoTrack: TTrack | null = null;
+        if (this.autoplayFetcher != null) {
+          autoTrack = await this.autoplayFetcher(lastTrack);
+        } else {
+          // Default smart autoplay fallback: search related tracks using artist & title or YouTube RD mix
+          const searchIdentifier = lastTrack.info?.identifier
+            ? `https://www.youtube.com/watch?v=${lastTrack.info.identifier}&list=RD${lastTrack.info.identifier}`
+            : `ytsearch:${lastTrack.info?.author ?? ""} ${lastTrack.info?.title ?? ""}`;
+
+          const result = await this._node.rest.loadTracks(searchIdentifier);
+          if (result.loadType === "playlist" && result.data.tracks.length > 1) {
+            autoTrack = (result.data.tracks[1] ?? result.data.tracks[0]) as TTrack;
+          } else if (result.loadType === "search" && result.data.length > 0) {
+            autoTrack = result.data[0] as TTrack;
+          }
+        }
+
         if (autoTrack != null) {
           this.queue.enqueue(autoTrack);
           const trackToPlay = this.queue.next() ?? autoTrack;
@@ -328,6 +344,36 @@ export class Player<TTrack extends TrackData = TrackData> {
     });
   }
 
+  /** Applies current filter chain payload to Lavalink node in real time */
+  public async setFilters(filters?: FilterChain): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    if (filters != null) {
+      this.filters.apply(filters.toPayload());
+    }
+
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId == null) return;
+
+    await this._node.rest.updatePlayer(sessionId, this.guildId, {
+      filters: this.filters.toPayload(),
+    });
+  }
+
+  /** Clears all applied filters and updates Lavalink node in real time */
+  public async clearFilters(): Promise<void> {
+    this.filters.clear();
+    await this.setFilters();
+  }
+
+  /** Sets autoplay state and optional custom recommendation fetcher */
+  public setAutoplay(enabled: boolean = true, fetcher?: (lastTrack: TTrack) => Promise<TTrack | null>): this {
+    this.autoplay = enabled;
+    if (fetcher !== undefined) {
+      this.autoplayFetcher = fetcher;
+    }
+    return this;
+  }
+
   /** Updates associated voice channel ID */
   public async setVoiceChannel(
     channelId: string,
@@ -370,4 +416,3 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this._destroyed;
   }
 }
-

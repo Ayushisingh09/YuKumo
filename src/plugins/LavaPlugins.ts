@@ -21,13 +21,7 @@ export interface LavaSrcOptions {
 }
 
 export type SponsorBlockCategory =
-  | "sponsor"
-  | "selfpromo"
-  | "interaction"
-  | "intro"
-  | "outro"
-  | "preview"
-  | "music_offtopic";
+  "sponsor" | "selfpromo" | "interaction" | "intro" | "outro" | "preview" | "music_offtopic";
 
 export interface SponsorBlockOptions {
   categories?: SponsorBlockCategory[];
@@ -72,4 +66,3 @@ export function createFloweryTTSPlugin(_options?: FloweryTTSOptions): Plugin {
     version: "4.0.0",
   };
 }
-

@@ -187,4 +187,3 @@ export class CustomSelector implements NodeSelector {
     return this.pickerFn(nodes, guildId);
   }
 }
-
