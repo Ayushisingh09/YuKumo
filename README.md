@@ -38,9 +38,10 @@ Built for production: multi-node load balancing, automatic failover, distributed
 
 ## Features
 
-**Core Protocol**
+**Core Protocol & Caching**
 - Full coverage of the Lavalink v4 REST API (search, decode, sessions, route planner, plugins) and WebSocket event dispatch
 - `lavaSearch` support for concurrent multi-category queries — tracks, albums, artists, playlists, and text sources
+- High-performance `SearchCache` LRU cache with configurable capacity (`maxSize`) and TTL support
 
 **Node Management**
 - 9 node-selection strategies: `RegionSelector`, `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`
@@ -57,16 +58,16 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - One-line presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, `setKaraoke()`
 
 **Framework Adapters & Voice State**
-- First-class gateway adapters for `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, and `Discordeno`
+- First-class gateway adapters for `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, `Davey`, and `Discordeno`
 - `RawGatewayAdapter` for custom or raw gateway integrations
 - Smart auto-reconnects and `playerMoved` events when a user moves the bot across voice channels
 
 **Plugins**
 - Pre-built wrappers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock segment filtering, and FloweryTTS
 
-**Observability & Scaling**
+**Observability & Logging**
 - `PrometheusExporter` for OpenMetrics-format output, ready for Grafana dashboards
-- Pluggable `Logger` interface
+- Flexible logging via `ConsoleLogger`, `NoopLogger`, `levelFilteredLogger`, or custom `Logger` implementations
 - Drop-in `RedisStorage` adapter for sharded and multi-process deployments
 
 ---
@@ -266,7 +267,7 @@ const yukumo = new YuKumo({
 
 ---
 
-## Observability
+## Observability & Logging
 
 Export live node and player metrics in OpenMetrics format for Prometheus / Grafana:
 
@@ -277,7 +278,19 @@ const exporter = new PrometheusExporter(yukumo);
 exporter.listen(9090); // scrape at :9090/metrics
 ```
 
-Bring your own logger via the pluggable `Logger` interface, or scale horizontally across processes with the built-in `RedisStorage` adapter.
+Configure custom loggers (`ConsoleLogger`, `NoopLogger`, or `levelFilteredLogger`) and LRU search caching:
+
+```js
+const { YuKumo, ConsoleLogger, levelFilteredLogger, SearchCache } = require("yukumo");
+
+const yukumo = new YuKumo({
+  nodes: [{ host: "localhost", port: 2333, password: "youshallnotpass" }],
+  logger: levelFilteredLogger(new ConsoleLogger(), "info"),
+  searchCache: new SearchCache({ maxSize: 200, ttl: 1800000 }), // 30 min TTL
+});
+```
+
+Scale horizontally across processes with the built-in `RedisStorage` adapter.
 
 ---
 
