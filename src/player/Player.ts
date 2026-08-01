@@ -479,7 +479,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (sessionId == null) return;
 
     await this._node.rest.updatePlayer(sessionId, this.guildId, {
-      track: null,
+      track: { encoded: null },
     });
 
     this._status = "idle";
