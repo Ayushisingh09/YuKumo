@@ -256,6 +256,76 @@ export class Queue<T> {
     }
   }
 
+  /** Swaps two tracks at indexA and indexB in the queue */
+  public swap(indexA: number, indexB: number): boolean {
+    if (
+      indexA < 0 ||
+      indexA >= this.tracks.length ||
+      indexB < 0 ||
+      indexB >= this.tracks.length
+    ) {
+      return false;
+    }
+    if (indexA === indexB) return true;
+
+    const temp = this.tracks[indexA] as T;
+    this.tracks[indexA] = this.tracks[indexB] as T;
+    this.tracks[indexB] = temp;
+
+    if (this.currentIndex === indexA) {
+      this.currentIndex = indexB;
+    } else if (this.currentIndex === indexB) {
+      this.currentIndex = indexA;
+    }
+
+    return true;
+  }
+
+  /**
+   * Jumps directly to a specific track index in the queue.
+   * In non-repeat-queue modes, preceding tracks up to index are added to history and dropped.
+   * @param index 0-based track index
+   */
+  public skipTo(index: number): T | null {
+    if (index < 0 || index >= this.tracks.length) return null;
+
+    if (this._repeatMode === "queue") {
+      this.currentIndex = index;
+      return this.tracks[index] as T;
+    }
+
+    const removedCount = index;
+    if (removedCount > 0) {
+      const removedTracks = this.tracks.splice(0, removedCount);
+      for (const track of removedTracks) {
+        this.history.push(track);
+        if (this.history.length > this.maxHistorySize) {
+          this.history.shift();
+        }
+      }
+    }
+
+    this.currentIndex = 0;
+    return this.tracks[0] as T;
+  }
+
+  /** Removes a slice of tracks starting from start index */
+  public removeRange(start: number, count: number): T[] {
+    return this.remove(start, count);
+  }
+
+  /** Clears all tracks from queue except the currently playing track */
+  public clearExceptCurrent(): void {
+    const current = this.currentTrack;
+    this.tracks.length = 0;
+    if (current != null) {
+      this.tracks.push(current);
+      this.currentIndex = 0;
+    } else {
+      this.currentIndex = -1;
+    }
+  }
+
   /** Replaces queue tracks with a new list */
   public setTracks(tracks: T[]): void {
     this.tracks.length = 0;

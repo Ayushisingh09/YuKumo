@@ -171,6 +171,9 @@ export type EventMap = {
   voiceReady: (guildId: string) => void;
   voiceDisconnected: (guildId: string) => void;
   voiceReconnecting: (guildId: string) => void;
+  autoplayTrackAdded: (guildId: string, track: TrackData) => void;
+  playerAutoPaused: (guildId: string) => void;
+  playerAutoDisconnected: (guildId: string) => void;
 };
 
 export type EventName = keyof EventMap;

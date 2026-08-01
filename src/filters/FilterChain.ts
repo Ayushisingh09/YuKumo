@@ -240,6 +240,60 @@ export class FilterChain {
     return this.add(eq);
   }
 
+  /** Applies a Slowed + Reverb preset (speed: 0.85, pitch: 0.85, lowPass filter) */
+  public setSlowedReverb(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("timescale");
+      this.remove("lowPass");
+      return this;
+    }
+    this.add(new TimescaleFilter({ speed: 0.85, pitch: 0.85, rate: 1.0 }));
+    return this.add(new LowPassFilter({ smoothing: 15.0 }));
+  }
+
+  /** Applies 3D Audio spatial rotation preset (0.2 Hz panning) */
+  public set3DAudio(enabled: boolean = true): this {
+    return this.set8D(enabled);
+  }
+
+  /** Shifts audio pitch by semitones (+/- 12 semitones) */
+  public setPitchShift(semitones: number): this {
+    if (semitones === 0) {
+      this.remove("timescale");
+      return this;
+    }
+    const pitch = Math.pow(2, semitones / 12);
+    return this.add(new TimescaleFilter({ speed: 1.0, pitch, rate: 1.0 }));
+  }
+
+  /** Applies a Vocal / Voice Isolation EQ preset */
+  public setVoiceIsolation(enabled: boolean = true): this {
+    if (!enabled) {
+      this.remove("equalizer");
+      return this;
+    }
+    // Cut deep sub-bass and boost vocal frequencies (1kHz - 4kHz)
+    const gains = [-0.25, -0.2, -0.1, 0.0, 0.15, 0.25, 0.2, 0.1, 0.0, -0.1];
+    const eq = new EqualizerFilter();
+    gains.forEach((gain, band) => eq.setBand(band, gain));
+    return this.add(eq);
+  }
+
+  private static readonly presetRegistry: Map<string, FiltersObject> = new Map();
+
+  /** Registers a custom named filter preset globally */
+  public static registerPreset(name: string, payload: FiltersObject): void {
+    FilterChain.presetRegistry.set(name, payload);
+  }
+
+  /** Applies a registered custom named filter preset */
+  public applyPreset(name: string): boolean {
+    const payload = FilterChain.presetRegistry.get(name);
+    if (payload == null) return false;
+    this.apply(payload);
+    return true;
+  }
+
   /** Removes every filter and returns the chain for one-call resets */
   public reset(): this {
     this.clear();

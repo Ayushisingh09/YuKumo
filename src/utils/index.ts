@@ -81,3 +81,7 @@ export function isPromise(value: unknown): value is Promise<unknown> {
 
 export { type Logger, type LogLevel, ConsoleLogger, NoopLogger, levelFilteredLogger } from "./Logger.ts";
 export * from "./SearchCache.ts";
+export * from "./Lyrics.ts";
+export * from "./SponsorBlock.ts";
+export * from "./UIHelpers.ts";
+export * from "./Middleware.ts";

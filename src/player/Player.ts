@@ -25,6 +25,12 @@ export interface PlayerOptions {
   selfDeaf?: boolean;
   /** Initial self mute status */
   selfMute?: boolean;
+  /** Whether to keep the player connected to voice channel when queue ends (24/7 mode) */
+  stayInVc?: boolean;
+  /** Timeout in ms to auto-pause or auto-disconnect when VC is empty (0 to disable) */
+  emptyVcTimeoutMs?: number;
+  /** Whether to pause playback instead of disconnecting when VC is empty */
+  pauseWhenEmpty?: boolean;
   /** Reference to the main YuKumo client */
   kumo: YuKumo;
 }
@@ -45,6 +51,15 @@ export class Player<TTrack extends TrackData = TrackData> {
   public autoplay: boolean = false;
   /** Custom autoplay recommendation fetcher hook */
   public autoplayFetcher?: (lastTrack: TTrack) => Promise<TTrack | null>;
+
+  /** Whether to remain in VC when queue ends (24/7 mode) */
+  public stayInVc: boolean = false;
+  /** Timeout in ms before auto-disconnecting or auto-pausing on empty VC */
+  public emptyVcTimeoutMs: number = 0;
+  /** Whether to pause instead of disconnect when VC is empty */
+  public pauseWhenEmpty: boolean = false;
+
+  private emptyVcTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _node: Node;
   private readonly kumo: YuKumo;
@@ -110,6 +125,9 @@ export class Player<TTrack extends TrackData = TrackData> {
     this._textChannelId = options.textChannelId ?? null;
     this._selfDeaf = options.selfDeaf ?? true;
     this._selfMute = options.selfMute ?? false;
+    this.stayInVc = options.stayInVc ?? false;
+    this.emptyVcTimeoutMs = options.emptyVcTimeoutMs ?? 0;
+    this.pauseWhenEmpty = options.pauseWhenEmpty ?? false;
     this.queue = new Queue<TTrack>();
     this.filters = new FilterChain();
     this.events = new EventDispatcher();
@@ -232,6 +250,7 @@ export class Player<TTrack extends TrackData = TrackData> {
 
         if (autoTrack != null) {
           this.queue.enqueue(autoTrack);
+          this.events.emit("autoplayTrackAdded", this.guildId, autoTrack);
           const trackToPlay = this.queue.next() ?? autoTrack;
           await this.playTrack(trackToPlay);
           return;
@@ -247,6 +266,56 @@ export class Player<TTrack extends TrackData = TrackData> {
     this._status = "idle";
     this._paused = false;
     this.events.emit("queueEnd", this.guildId);
+  }
+
+  /** Gets whether autoplay is currently enabled */
+  public isAutoplayEnabled(): boolean {
+    return this.autoplay;
+  }
+
+  /** Fetches synced lyrics for current playing track or specified track via LRCLIB */
+  public async getSyncedLyrics(track?: TTrack): Promise<import("../utils/Lyrics.ts").LyricsResult | null> {
+    const targetTrack = track ?? this.currentTrack;
+    if (!targetTrack?.info) return null;
+    const { LyricsClient } = await import("../utils/Lyrics.ts");
+    const client = new LyricsClient();
+    return client.getLyrics(
+      targetTrack.info.title ?? "",
+      targetTrack.info.author ?? "",
+      undefined,
+      targetTrack.info.length ? Math.round(targetTrack.info.length / 1000) : undefined,
+    );
+  }
+
+  /** Sets whether to remain connected to voice channel when queue ends (24/7 mode) */
+  public setStayInVc(enabled: boolean): this {
+    this.stayInVc = enabled;
+    return this;
+  }
+
+  /** Updates member count in player voice channel to manage auto-disconnect/pause timers */
+  public setVcMemberCount(count: number): void {
+    if (this.emptyVcTimeoutMs <= 0) return;
+
+    if (count <= 1) {
+      if (this.emptyVcTimer == null) {
+        this.emptyVcTimer = setTimeout(() => {
+          this.emptyVcTimer = null;
+          if (this.pauseWhenEmpty && this._status === "playing") {
+            this.pause().catch(() => undefined);
+            this.events.emit("playerAutoPaused", this.guildId);
+          } else if (!this.stayInVc) {
+            this.events.emit("playerAutoDisconnected", this.guildId);
+            this.destroy().catch(() => undefined);
+          }
+        }, this.emptyVcTimeoutMs);
+      }
+    } else {
+      if (this.emptyVcTimer != null) {
+        clearTimeout(this.emptyVcTimer);
+        this.emptyVcTimer = null;
+      }
+    }
   }
 
   /** Subscribes to player events */
@@ -748,6 +817,10 @@ export class Player<TTrack extends TrackData = TrackData> {
   /** Destroys player, leaves the voice channel, clears queue and filters, and removes event listeners */
   public async destroy(): Promise<void> {
     if (this._destroyed) return;
+    if (this.emptyVcTimer != null) {
+      clearTimeout(this.emptyVcTimer);
+      this.emptyVcTimer = null;
+    }
     this.sendVoiceStateToDiscord(null);
     this._destroyed = true;
     this._status = "destroyed";
