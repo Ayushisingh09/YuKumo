@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseLrc, LyricsClient } from "./Lyrics.ts";
+import { parseLrc } from "./Lyrics.ts";
 import { SponsorBlockClient } from "./SponsorBlock.ts";
 
 describe("Lyrics & SponsorBlock Integration", () => {

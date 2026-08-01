@@ -1,6 +1,6 @@
 {
   "name": "yukumo",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "High-performance, framework-agnostic Lavalink v4 client for JavaScript and TypeScript",
   "keywords": [
     "lavalink",
@@ -53,7 +53,9 @@
     "bench": "bun run src/bench.ts",
     "test:integration": "bash test/run-integration.sh",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build && npm run typecheck && npm run test"
+    "prepublishOnly": "npm run build && npm run typecheck && npm run test",
+    "release": "npm run prepublishOnly && npm publish --access public",
+    "release:dry": "npm run prepublishOnly && npm publish --dry-run"
   },
   "dependencies": {
     "ws": "^8.21.1"
