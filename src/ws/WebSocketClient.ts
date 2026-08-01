@@ -274,6 +274,7 @@ export class WebSocketClient {
           "debug",
           `Voice WebSocket closed: guild=${guildId} code=${event.code} reason=${event.reason}`,
         );
+        this.events.emit("socketClosed", guildId, event.code, event.reason, event.byRemote);
         break;
       }
       default: {

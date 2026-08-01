@@ -64,6 +64,11 @@ export class Player<TTrack extends TrackData = TrackData> {
   private _destroyed: boolean = false;
   private _selfDeaf: boolean;
   private _selfMute: boolean;
+  private voiceReadyWaiters: Array<{
+    resolve: () => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }> = [];
 
   private readonly boundOnTrackEnd = (guildId: string, track: TrackData, reason: string) => {
     if (guildId !== this.guildId) return;
@@ -285,8 +290,14 @@ export class Player<TTrack extends TrackData = TrackData> {
     oldNode.playerCount = Math.max(0, oldNode.playerCount - 1);
     node.playerCount += 1;
 
+    // The new node's session has never seen this player's voice credentials
+    this._voiceStateSent = false;
+
     if (this._status === "playing" && this.currentTrack != null) {
       await this.playTrack(this.currentTrack, { position: this._position });
+    } else {
+      // Not playing — still register the player (voice + volume/filters) on the new node
+      await this.resync().catch(() => undefined);
     }
   }
 
@@ -330,6 +341,71 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this.kumo.getLyrics(trackToUse);
   }
 
+  /** Whether complete voice credentials (token + endpoint + sessionId) are held */
+  public get hasVoiceCredentials(): boolean {
+    return (
+      this._voiceState.token != null &&
+      this._voiceState.token !== "" &&
+      this._voiceState.endpoint != null &&
+      this._voiceState.endpoint !== "" &&
+      this._voiceState.sessionId != null &&
+      this._voiceState.sessionId !== ""
+    );
+  }
+
+  /**
+   * Resolves once complete voice credentials are available (both Discord voice
+   * gateway events processed), so playback isn't sent to Lavalink before the
+   * voice connection can exist. Resolves immediately when credentials are
+   * already held; rejects after `timeoutMs` (default 15000) otherwise.
+   */
+  public waitForVoiceReady(timeoutMs: number = 15000): Promise<void> {
+    if (this._destroyed) {
+      return Promise.reject(new PlayerError("Player is destroyed", this.guildId));
+    }
+    if (this.hasVoiceCredentials || !this.kumo?.events) return Promise.resolve();
+
+    // Credentials may already be sitting in the global tracker (e.g. player
+    // recreated while the bot never left the channel)
+    const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
+    if (globalVoice != null && globalVoice.token && globalVoice.endpoint && globalVoice.sessionId) {
+      this.setVoiceState(globalVoice);
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const waiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.voiceReadyWaiters = this.voiceReadyWaiters.filter((w) => w !== waiter);
+          reject(
+            new PlayerNotConnectedError(
+              this.guildId,
+              `Voice connection was not established within ${timeoutMs}ms`,
+            ),
+          );
+        }, timeoutMs),
+      };
+      (waiter.timer as { unref?: () => void }).unref?.();
+      this.voiceReadyWaiters.push(waiter);
+    });
+  }
+
+  private settleVoiceReadyWaiters(error?: Error): void {
+    if (this.voiceReadyWaiters.length === 0) return;
+    const waiters = this.voiceReadyWaiters;
+    this.voiceReadyWaiters = [];
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      if (error != null) {
+        waiter.reject(error);
+      } else {
+        waiter.resolve();
+      }
+    }
+  }
+
   /**
    * Begins playback of the given track. If none provided, plays next in queue.
    */
@@ -362,11 +438,17 @@ export class Player<TTrack extends TrackData = TrackData> {
         throw new PlayerNotConnectedError(this.guildId);
       }
 
-      if (!this._voiceState.token || !this._voiceState.endpoint || !this._voiceState.sessionId) {
+      if (!this.hasVoiceCredentials) {
         const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
         if (globalVoice != null) {
           this.setVoiceState(globalVoice);
         }
+      }
+
+      // Don't race Discord's voice handshake: a track PATCH sent before the
+      // voice credentials reach Lavalink plays nothing and reports no error
+      if (!this.hasVoiceCredentials) {
+        await this.waitForVoiceReady();
       }
 
       await this.sendVoiceUpdate();
@@ -570,12 +652,67 @@ export class Player<TTrack extends TrackData = TrackData> {
 
     try {
       await this._node.rest.updatePlayer(sessionId, this.guildId, {
-        voice: { token, endpoint, sessionId: voiceSessionId },
+        voice: { token, endpoint, sessionId: voiceSessionId, channelId: this._voiceChannelId },
       });
       this._voiceStateSent = true;
     } catch (err) {
-      // Ignore voice update error if player voice state is already registered
+      // Surface the failure — a rejected voice update means no audio; hiding
+      // the node's 4xx/5xx response makes that undiagnosable
+      this.events.emit(
+        "debug",
+        `Voice update rejected for guild ${this.guildId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
     }
+  }
+
+  /**
+   * Re-sends full player state (voice credentials, current track, position,
+   * volume, pause, filters) to the node. Used after a node reconnects with a
+   * fresh Lavalink session (which starts with zero players) and after node
+   * failover migration.
+   */
+  public async resync(): Promise<void> {
+    if (this._destroyed) return;
+
+    // The new session has no players — the previous "already sent" state is meaningless
+    this._voiceStateSent = false;
+
+    if (!this.hasVoiceCredentials) {
+      const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
+      if (globalVoice != null && globalVoice.token && globalVoice.endpoint && globalVoice.sessionId) {
+        this.setVoiceState(globalVoice);
+      }
+    }
+    if (!this.hasVoiceCredentials) {
+      this.events.emit(
+        "debug",
+        `Cannot resync player for guild ${this.guildId}: missing voice credentials`,
+      );
+      return;
+    }
+
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId == null) return;
+
+    const { token, endpoint, sessionId: voiceSessionId } = this._voiceState;
+    const current = this.queue.currentTrack;
+    const filterPayload = this.filters.toPayload();
+    const hasFilterKeys = Object.keys(filterPayload).length > 0;
+
+    await this._node.rest.updatePlayer(sessionId, this.guildId, {
+      voice: { token: token!, endpoint: endpoint!, sessionId: voiceSessionId!, channelId: this._voiceChannelId },
+      ...(current != null
+        ? {
+            track: { encoded: current.encoded },
+            position: this._position,
+            paused: this._paused,
+          }
+        : {}),
+      volume: this._volume,
+      filters: hasFilterKeys ? filterPayload : undefined,
+    });
+    this._voiceStateSent = true;
   }
 
   /** Replaces complete internal voice connection state */
@@ -588,6 +725,9 @@ export class Player<TTrack extends TrackData = TrackData> {
       this._voiceStateSent = false;
     }
     this._voiceState = { ...state };
+    if (this.hasVoiceCredentials) {
+      this.settleVoiceReadyWaiters();
+    }
   }
 
   /** Updates partial internal voice connection state */
@@ -600,6 +740,9 @@ export class Player<TTrack extends TrackData = TrackData> {
       this._voiceStateSent = false;
     }
     Object.assign(this._voiceState, partial);
+    if (this.hasVoiceCredentials) {
+      this.settleVoiceReadyWaiters();
+    }
   }
 
   /** Destroys player, leaves the voice channel, clears queue and filters, and removes event listeners */
@@ -608,6 +751,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     this.sendVoiceStateToDiscord(null);
     this._destroyed = true;
     this._status = "destroyed";
+    this.settleVoiceReadyWaiters(new PlayerError("Player is destroyed", this.guildId));
     this.removeNodeListeners();
     this.queue.clear();
     this.filters.clear();

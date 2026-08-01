@@ -65,6 +65,17 @@ export interface ManagerOptions {
    * `send: (guildId, payload) => client.guilds.cache.get(guildId)?.shard.send(payload)`
    */
   send?: (guildId: string, payload: VoiceGatewayPayload) => void;
+  /**
+   * What to do when the bot is disconnected from a voice channel
+   * (VOICE_STATE_UPDATE with channel_id null).
+   * - destroyPlayer (default true): destroy the player.
+   * - autoReconnect: re-send OP4 to rejoin the last channel and resume the
+   *   current track at its saved position. Takes precedence over destroyPlayer.
+   */
+  onDisconnect?: {
+    destroyPlayer?: boolean;
+    autoReconnect?: boolean;
+  };
   defaultSearchSource?: string;
   defaultNodeSelector?: {
     pick: (
@@ -155,6 +166,8 @@ export type EventMap = {
   ) => void;
   stats: (nodeId: string, stats: NodeStats) => void;
   debug: (message: string) => void;
+  /** Discord voice WebSocket closed on the Lavalink side (codes 4xxx are Discord voice close codes) */
+  socketClosed: (guildId: string, code: number, reason: string, byRemote: boolean) => void;
   voiceReady: (guildId: string) => void;
   voiceDisconnected: (guildId: string) => void;
   voiceReconnecting: (guildId: string) => void;

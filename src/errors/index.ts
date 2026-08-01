@@ -37,8 +37,14 @@ export class PlayerError extends YuKumoError {
 }
 
 export class PlayerNotConnectedError extends PlayerError {
-  constructor(guildId: string) {
-    super(`Player for guild ${guildId} is not connected`, guildId, "PLAYER_NOT_CONNECTED");
+  constructor(guildId: string, detail?: string) {
+    super(
+      detail != null
+        ? `Player for guild ${guildId} is not connected: ${detail}`
+        : `Player for guild ${guildId} is not connected`,
+      guildId,
+      "PLAYER_NOT_CONNECTED",
+    );
     this.name = "PlayerNotConnectedError";
   }
 }

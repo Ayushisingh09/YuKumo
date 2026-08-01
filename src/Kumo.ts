@@ -111,6 +111,8 @@ export class YuKumo {
   public readonly voice: VoiceStateTracker;
   public readonly searchCache: SearchCache;
   public defaultSearchSource: string;
+  /** Disconnect behavior configuration (see ManagerOptions.onDisconnect) */
+  private readonly onDisconnect: { destroyPlayer: boolean; autoReconnect: boolean };
   /** User-provided Discord gateway dispatcher for OP4 voice payloads (see ManagerOptions.send) */
   public readonly sendGatewayPayload?: (guildId: string, payload: VoiceGatewayPayload) => void;
   /** Level-filtered logger for internal diagnostics (no-op unless configured) */
@@ -127,6 +129,10 @@ export class YuKumo {
         ? levelFilteredLogger(options.logger, options.logLevel ?? "warn")
         : new NoopLogger();
     this.defaultSearchSource = options.defaultSearchSource ?? "ytsearch";
+    this.onDisconnect = {
+      destroyPlayer: options.onDisconnect?.destroyPlayer ?? true,
+      autoReconnect: options.onDisconnect?.autoReconnect ?? false,
+    };
     this.storage = options.storageAdapter ?? new MemoryStorage();
     this.events = new EventDispatcher();
     this.voice = new VoiceStateTracker(this.events);
@@ -459,7 +465,7 @@ export class YuKumo {
     if (player == null) return;
 
     if (data.channelId == null) {
-      await this.destroyPlayer(data.guildId);
+      await this.handleVoiceDisconnect(data.guildId, player);
       return;
     }
 
@@ -478,9 +484,63 @@ export class YuKumo {
     });
   }
 
+  /**
+   * Handles the bot being disconnected from a voice channel per the
+   * configured onDisconnect policy (autoReconnect wins over destroyPlayer).
+   */
+  private async handleVoiceDisconnect(guildId: string, player: Player): Promise<void> {
+    if (this.onDisconnect.autoReconnect && this.sendGatewayPayload != null) {
+      const position = player.position;
+      const paused = player.paused;
+      const current = player.currentTrack;
+      try {
+        // Re-OP4 to rejoin; fresh credentials arrive via the adapters, and
+        // playTrack awaits voice readiness before pushing the track
+        player.connect();
+        this.events.emit("debug", `Auto-reconnecting player for guild ${guildId}`);
+        if (current != null) {
+          await player.playTrack(current, { position });
+          if (paused) await player.pause();
+        }
+        return;
+      } catch (err: unknown) {
+        this.events.emit(
+          "debug",
+          `Auto-reconnect failed for guild ${guildId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        await this.destroyPlayer(guildId);
+        return;
+      }
+    }
+
+    if (this.onDisconnect.destroyPlayer) {
+      await this.destroyPlayer(guildId);
+    }
+  }
+
+  /**
+   * Processes a Discord CHANNEL_DELETE gateway event. Destroys the player when
+   * its voice channel is deleted (there is nothing to stay connected to).
+   */
+  public async handleChannelDelete(guildId: string, channelId: string): Promise<void> {
+    const player = this.players.get(guildId);
+    if (player == null) return;
+    if (player.voiceChannelId !== channelId) return;
+
+    this.events.emit("debug", `Voice channel ${channelId} deleted, destroying player for guild ${guildId}`);
+    await this.destroyPlayer(guildId);
+  }
+
   /** Processes raw Discord VOICE_SERVER_UPDATE gateway event */
   public async handleVoiceServerUpdate(guildId: string, data: VoiceServerUpdate): Promise<void> {
     this.voice.handleVoiceServerUpdate(guildId, data);
+
+    // Null endpoint = region failover in progress; keep current credentials
+    // and wait for the follow-up update carrying the real endpoint
+    if (data.endpoint == null) {
+      this.events.emit("debug", `Voice server update for guild ${guildId} has no endpoint yet, holding`);
+      return;
+    }
 
     const player = this.players.get(guildId);
     if (player == null) return;
@@ -547,7 +607,14 @@ export class YuKumo {
 
   private bindNodeEvents(node: Node): void {
     const ws = node.ws.eventDispatcher;
-    ws.on("nodeReady", (nodeId: string) => this.events.emit("nodeReady", nodeId));
+    ws.on("nodeReady", (nodeId: string) => {
+      this.events.emit("nodeReady", nodeId);
+      // A fresh (non-resumed) Lavalink session starts with zero players —
+      // push each affected player's full state back or they stay silent forever
+      if (!node.ws.resumed) {
+        this.resyncPlayersOnNode(nodeId);
+      }
+    });
     ws.on("nodeDisconnected", (nodeId: string, code: number, reason: string) => {
       this.events.emit("nodeDisconnected", nodeId, code, reason);
       this.handleNodeFailover(nodeId);
@@ -556,6 +623,10 @@ export class YuKumo {
     ws.on("nodeError", (nodeId: string, error: Error) => this.events.emit("nodeError", nodeId, error));
     ws.on("stats", (nodeId: string, stats: unknown) => this.events.emit("stats", nodeId, stats as never));
     ws.on("debug", (msg: string) => this.events.emit("debug", msg));
+    ws.on("socketClosed", (guildId: string, code: number, reason: string, byRemote: boolean) => {
+      this.events.emit("socketClosed", guildId, code, reason, byRemote);
+      this.handleVoiceSocketClosed(guildId, code);
+    });
     ws.on("trackStart", (guildId: string, track: TrackData) =>
       this.events.emit("trackStart", guildId, track),
     );
@@ -573,6 +644,34 @@ export class YuKumo {
       (guildId: string, state: { time: number; position: number; connected: boolean; ping: number }) =>
         this.events.emit("playerUpdate", guildId, state),
     );
+  }
+
+  /**
+   * Reacts to Discord-side voice WebSocket closures reported by Lavalink.
+   * 4015 (voice server crashed) and 4009 (session timed out) are recoverable
+   * by re-sending OP4 to Discord and pushing fresh credentials to the node.
+   */
+  private handleVoiceSocketClosed(guildId: string, code: number): void {
+    const player = this.players.get(guildId);
+    if (player == null) return;
+
+    if (code === 4015 || code === 4009) {
+      this.logger.warn(`Voice socket closed for guild ${guildId} (code ${code}), rejoining channel`);
+      // Re-OP4 triggers Discord to issue fresh VOICE_STATE/SERVER_UPDATE events,
+      // which flow through the adapters back to sendVoiceUpdate()
+      player.connect();
+    }
+  }
+
+  private resyncPlayersOnNode(nodeId: string): void {    const affected = this.players.getAll().filter((p) => p.node.id === nodeId);
+    for (const player of affected) {
+      player.resync().catch((err: unknown) => {
+        this.events.emit(
+          "debug",
+          `Failed to resync player for guild ${player.guildId} after node ${nodeId} reconnected: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
   }
 
   private handleNodeFailover(failedNodeId: string): void {

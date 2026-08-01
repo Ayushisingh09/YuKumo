@@ -295,7 +295,7 @@ export class RestClient {
       volume?: number;
       paused?: boolean;
       filters?: FiltersObject;
-      voice?: { token: string; endpoint: string; sessionId: string };
+      voice?: { token: string; endpoint: string; sessionId: string; channelId?: string | null };
     },
     noReplace?: boolean,
   ): Promise<PlayerData> {

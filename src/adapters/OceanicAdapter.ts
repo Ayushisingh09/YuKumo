@@ -25,6 +25,10 @@ export class OceanicAdapter {
         token: d.token,
         endpoint: d.endpoint ?? null,
       });
+    } else if (t === "CHANNEL_DELETE") {
+      if (d.guild_id != null && d.id != null) {
+        void this.kumo.handleChannelDelete(String(d.guild_id), String(d.id));
+      }
     }
   };
 

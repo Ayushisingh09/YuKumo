@@ -33,6 +33,11 @@ export class ErisAdapter {
         token: String(d.token ?? ""),
         endpoint: d.endpoint != null ? String(d.endpoint) : null,
       });
+    } else if (packet.t === "CHANNEL_DELETE") {
+      const d = packet.d;
+      if (d.guild_id != null && d.id != null) {
+        void this.kumo.handleChannelDelete(String(d.guild_id), String(d.id));
+      }
     }
   };
 
