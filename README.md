@@ -50,17 +50,25 @@ Built for production: multi-node load balancing, automatic failover, distributed
 
 **Queueing & Player Controls**
 - Repeat modes (`off`, `track`, `queue`), play history, shuffle, and priority track injection via `priorityEnqueue`
-- `playPrevious()` to seamlessly replay the last track from history
+- Advanced queue helpers: `swap()`, `skipTo()`, `removeRange()`, and `clearExceptCurrent()`
+- Smart Autoplay recommendation engine (`setAutoplay()`) with `autoplayTrackAdded` event notifications
 - Queue state serialization (`export()` / `import()`) and pagination (`getPage`)
 
 **Audio & Filters**
 - Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass
-- One-line presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `set8D()`, `setKaraoke()`
+- High-level presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `setSlowedReverb()`, `set3DAudio()`, `setPitchShift()`, `setVoiceIsolation()`
+- Global custom named filter preset registry (`FilterChain.registerPreset()` / `applyPreset()`)
 
-**Framework Adapters & Voice State**
+**Voice State & Smart Behaviors**
+- 24/7 Mode (`stayInVc`) to prevent channel disconnects on queue completion
+- Smart empty voice channel monitor (`setVcMemberCount()`) with configurable auto-pause and auto-disconnect timeouts
 - First-class gateway adapters for `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, `Davey`, and `Discordeno`
-- `RawGatewayAdapter` for custom or raw gateway integrations
-- Smart auto-reconnects and `playerMoved` events when a user moves the bot across voice channels
+
+**Lyrics, SponsorBlock & DX Utilities**
+- Integrated LRCLIB synced lyrics (`getSyncedLyrics()`) with timestamp parser (`parseLrc()`)
+- SponsorBlock segment skipping helper (`SponsorBlockClient`) for skipping sponsor sections, intros, and outros
+- UI & Progress Bar helpers (`getProgressBar()`, `formatDuration()`, `createQueueEmbedData()`)
+- Middleware interceptor registry (`MiddlewareRegistry` / `useBeforeTrackStart`)
 
 **Plugins**
 - Pre-built wrappers for LavaSrc (Spotify, Apple Music, Deezer, Yandex Music), SponsorBlock segment filtering, and FloweryTTS
