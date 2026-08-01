@@ -1,8 +1,9 @@
 export class YuKumoError extends Error {
   public readonly code: string;
 
-  constructor(message: string, code: string) {
-    super(message);
+  constructor(message: string, code: string, options?: { cause?: unknown }) {
+    // Forwarding cause preserves the original error's stack when wrapping
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "YuKumoError";
     this.code = code;
   }
@@ -71,10 +72,17 @@ export class QueueFullError extends QueueError {
 export class PluginError extends YuKumoError {
   public readonly pluginName: string;
 
-  constructor(message: string, pluginName: string, code?: string) {
-    super(message, code ?? "PLUGIN_ERROR");
+  constructor(message: string, pluginName: string, code?: string, options?: { cause?: unknown }) {
+    super(message, code ?? "PLUGIN_ERROR", options);
     this.name = "PluginError";
     this.pluginName = pluginName;
+  }
+}
+
+export class StorageError extends YuKumoError {
+  constructor(message: string, code?: string, options?: { cause?: unknown }) {
+    super(message, code ?? "STORAGE_ERROR", options);
+    this.name = "StorageError";
   }
 }
 

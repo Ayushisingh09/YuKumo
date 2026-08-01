@@ -1,5 +1,5 @@
 import { RestError, LoadError } from "../errors/index.ts";
-import { retry, promiseTimeout, type RetryOptions } from "../utils/index.ts";
+import { retry, type RetryOptions } from "../utils/index.ts";
 import type {
   LoadResult,
   PlayerData,
@@ -56,6 +56,18 @@ interface CacheEntry<T> {
 
 function buildBaseUrl(host: string, port: number, secure?: boolean): string {
   return `${(secure ?? false) ? "https" : "http"}://${host}:${port}/v4`;
+}
+
+/**
+ * Default retry policy: network failures, timeouts, rate limits, and server
+ * errors are transient; other 4xx responses (404, 400, 401…) never succeed
+ * on retry, so retrying them only burns time and requests.
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof RestError) {
+    return error.statusCode === 0 || error.statusCode === 429 || error.statusCode >= 500;
+  }
+  return true;
 }
 
 /**
@@ -145,52 +157,74 @@ export class RestClient {
       }
     }
 
-    const options: RequestInit = {
-      method,
-      headers: this.buildHeaders(),
-      body: body != null ? JSON.stringify(body) : undefined,
-      keepalive: true,
+    const doFetch = async (): Promise<T> => {
+      // AbortSignal actually cancels the request on timeout — a raced timer
+      // would leave the socket open and let retries stack concurrent copies
+      const options: RequestInit = {
+        method,
+        headers: this.buildHeaders(),
+        body: body != null ? JSON.stringify(body) : undefined,
+        keepalive: true,
+        signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(this.timeout) : undefined,
+      };
+
+      let response: Response;
+      try {
+        response = await fetch(url.toString(), options);
+      } catch (error) {
+        if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+          throw new RestError(
+            `Request to ${method} ${path} timed out after ${this.timeout}ms`,
+            0,
+            path,
+            "REST_TIMEOUT",
+          );
+        }
+        throw error;
+      }
+
+      if (response.status === 429) {
+        const retryAfterHeader = response.headers?.get?.("Retry-After");
+        let waitMs = 1000;
+        if (retryAfterHeader) {
+          const parsedSeconds = parseInt(retryAfterHeader, 10);
+          if (!isNaN(parsedSeconds)) {
+            waitMs = parsedSeconds * 1000;
+          }
+        }
+        // Consume the body so the keep-alive connection can be reused,
+        // then throw immediately — retry() honors retryAfter as the delay
+        await response.body?.cancel?.().catch?.(() => undefined);
+        const rateLimitError = new RestError(`Rate limited (429)`, 429, path) as RestError & {
+          retryAfter: number;
+        };
+        rateLimitError.retryAfter = waitMs;
+        throw rateLimitError;
+      }
+
+      if (!response.ok) {
+        let errorBody: Record<string, unknown> | undefined;
+        try {
+          errorBody = (await response.json()) as Record<string, unknown>;
+        } catch {
+          // ignore parse errors
+        }
+
+        const message = (errorBody?.message as string) ?? response.statusText;
+        throw new RestError(message, response.status, path);
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return response.json() as Promise<T>;
     };
 
-    const doFetch = (): Promise<T> =>
-      promiseTimeout(
-        fetch(url.toString(), options).then(async (response) => {
-          if (response.status === 429) {
-            const retryAfterHeader = response.headers?.get?.("Retry-After");
-            let waitMs = 1000;
-            if (retryAfterHeader) {
-              const parsedSeconds = parseInt(retryAfterHeader, 10);
-              if (!isNaN(parsedSeconds)) {
-                waitMs = parsedSeconds * 1000;
-              }
-            }
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-            throw new RestError(`Rate limited (429), retrying after ${waitMs}ms`, 429, path);
-          }
-
-          if (!response.ok) {
-            let errorBody: Record<string, unknown> | undefined;
-            try {
-              errorBody = (await response.json()) as Record<string, unknown>;
-            } catch {
-              // ignore parse errors
-            }
-
-            const message = (errorBody?.message as string) ?? response.statusText;
-            throw new RestError(message, response.status, path);
-          }
-
-          if (response.status === 204) {
-            return undefined as T;
-          }
-
-          return response.json() as Promise<T>;
-        }),
-        this.timeout,
-        `Request to ${method} ${path} timed out after ${this.timeout}ms`,
-      );
-
-    return retry(doFetch, this.retryOptions);
+    return retry(doFetch, {
+      ...this.retryOptions,
+      shouldRetry: this.retryOptions?.shouldRetry ?? isRetryableError,
+    });
   }
 
   /**
@@ -206,21 +240,36 @@ export class RestClient {
   }
 
   /**
-   * Fetches all active players for a session.
-   * @param sessionId The target session ID
+   * Resolves an explicit session ID or falls back to the one received from the
+   * node's ready op — so callers that cached a pre-reconnect ID can pass null
+   * and always target the live session.
    */
-  public async getPlayers(sessionId: string): Promise<PlayerData[]> {
-    return this.request<PlayerData[]>("GET", `/sessions/${sessionId}/players`);
+  private resolveSessionId(sessionId: string | null | undefined, path: string): string {
+    const sid = sessionId != null && sessionId !== "" ? sessionId : this._sessionId;
+    if (sid == null || sid === "") {
+      throw new RestError("No active Lavalink session (node not ready)", 0, path, "NO_SESSION");
+    }
+    return sid;
+  }
+
+  /**
+   * Fetches all active players for a session.
+   * @param sessionId The target session ID (null uses the current session)
+   */
+  public async getPlayers(sessionId: string | null = null): Promise<PlayerData[]> {
+    const sid = this.resolveSessionId(sessionId, "/sessions/-/players");
+    return this.request<PlayerData[]>("GET", `/sessions/${sid}/players`);
   }
 
   /**
    * Fetches player state for a specific guild.
-   * @param sessionId The target session ID
+   * @param sessionId The target session ID (null uses the current session)
    * @param guildId The target guild ID
    */
-  public async getPlayer(sessionId: string, guildId: string): Promise<PlayerData | null> {
+  public async getPlayer(sessionId: string | null, guildId: string): Promise<PlayerData | null> {
+    const sid = this.resolveSessionId(sessionId, `/sessions/-/players/${guildId}`);
     try {
-      return await this.request<PlayerData>("GET", `/sessions/${sessionId}/players/${guildId}`);
+      return await this.request<PlayerData>("GET", `/sessions/${sid}/players/${guildId}`);
     } catch (error) {
       if (error instanceof RestError && error.statusCode === 404) {
         return null;
@@ -237,7 +286,7 @@ export class RestClient {
    * @param noReplace If true, ignores track parameter if player is already playing a track
    */
   public async updatePlayer(
-    sessionId: string,
+    sessionId: string | null,
     guildId: string,
     options: {
       track?: { encoded?: string | null; identifier?: string; userData?: Record<string, unknown> } | null;
@@ -250,13 +299,14 @@ export class RestClient {
     },
     noReplace?: boolean,
   ): Promise<PlayerData> {
+    const sid = this.resolveSessionId(sessionId, `/sessions/-/players/${guildId}`);
     const params: Record<string, string> = {};
     if (noReplace === true) {
       params.noReplace = "true";
     }
     return this.request<PlayerData>(
       "PATCH",
-      `/sessions/${sessionId}/players/${guildId}`,
+      `/sessions/${sid}/players/${guildId}`,
       options,
       Object.keys(params).length > 0 ? params : undefined,
     );
@@ -267,8 +317,9 @@ export class RestClient {
    * @param sessionId The target session ID
    * @param guildId The target guild ID
    */
-  public async destroyPlayer(sessionId: string, guildId: string): Promise<void> {
-    return this.request<void>("DELETE", `/sessions/${sessionId}/players/${guildId}`);
+  public async destroyPlayer(sessionId: string | null, guildId: string): Promise<void> {
+    const sid = this.resolveSessionId(sessionId, `/sessions/-/players/${guildId}`);
+    return this.request<void>("DELETE", `/sessions/${sid}/players/${guildId}`);
   }
 
   /**

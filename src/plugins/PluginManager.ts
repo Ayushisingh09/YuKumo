@@ -91,6 +91,8 @@ export class PluginManager {
           throw new PluginError(
             `Plugin "${plugin.name}" failed to start: ${(error as Error).message}`,
             plugin.name,
+            undefined,
+            { cause: error },
           );
         }
       }
@@ -236,6 +238,8 @@ export class PluginManager {
       throw new PluginError(
         `Plugin "${plugin.name}" failed to initialize: ${(error as Error).message}`,
         plugin.name,
+        undefined,
+        { cause: error },
       );
     }
   }

@@ -109,8 +109,13 @@ export class FilterChain {
     }
   }
 
-  /** Applies a Bass Boost equalizer preset */
-  public setBassBoost(level: BassBoostLevel = "medium"): this {
+  /** Applies a Bass Boost equalizer preset; pass `false` to remove it */
+  public setBassBoost(level: BassBoostLevel | false = "medium"): this {
+    if (level === false) {
+      this.remove("equalizer");
+      return this;
+    }
+
     const gains: Record<BassBoostLevel, number[]> = {
       low: [0.1, 0.08, 0.05, 0.0, 0.0],
       medium: [0.2, 0.15, 0.1, 0.05, 0.0],
@@ -235,12 +240,20 @@ export class FilterChain {
     return this.add(eq);
   }
 
-  /** Clones this filter chain */
+  /** Removes every filter and returns the chain for one-call resets */
+  public reset(): this {
+    this.clear();
+    return this;
+  }
+
+  /**
+   * Clones this filter chain. The clone owns independent filter instances
+   * (round-tripped through the payload), so mutating one chain never
+   * affects the other.
+   */
   public clone(): FilterChain {
     const chain = new FilterChain();
-    for (const filter of this.filters.values()) {
-      chain.filters.set(filter.name, filter);
-    }
+    chain.apply(this.toPayload());
     return chain;
   }
 }

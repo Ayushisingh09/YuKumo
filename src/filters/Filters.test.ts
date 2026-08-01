@@ -123,7 +123,13 @@ describe("FilterChain", () => {
 
     const clone = chain.clone();
     expect(clone.has("volume")).toBe(true);
-    expect(clone.get("volume")).toBe(chain.get("volume"));
+    // The clone owns independent instances — same payload, not the same object,
+    // so mutating the clone can never affect the original chain
+    expect(clone.get("volume")).not.toBe(chain.get("volume"));
+    expect(clone.toPayload()).toEqual(chain.toPayload());
+
+    clone.remove("volume");
+    expect(chain.has("volume")).toBe(true);
   });
 
   it("should apply payload to rebuild filters", () => {

@@ -5,6 +5,7 @@ import { EventDispatcher } from "./ws/EventDispatcher.ts";
 import { MemoryStorage } from "./storage/MemoryStorage.ts";
 import { VoiceStateTracker } from "./voice/VoiceStateTracker.ts";
 import { SearchCache } from "./utils/SearchCache.ts";
+import { levelFilteredLogger, NoopLogger, type Logger } from "./utils/Logger.ts";
 import { PluginError } from "./errors/index.ts";
 import type { Node } from "./node/Node.ts";
 import type { Player } from "./player/Player.ts";
@@ -112,6 +113,8 @@ export class YuKumo {
   public defaultSearchSource: string;
   /** User-provided Discord gateway dispatcher for OP4 voice payloads (see ManagerOptions.send) */
   public readonly sendGatewayPayload?: (guildId: string, payload: VoiceGatewayPayload) => void;
+  /** Level-filtered logger for internal diagnostics (no-op unless configured) */
+  public readonly logger: Logger;
   private _userId: string;
   private readonly pendingPlayerCreates = new Map<string, Promise<Player>>();
   private readonly adapters = new Set<{ destroy(): void }>();
@@ -119,6 +122,10 @@ export class YuKumo {
   public constructor(options: ManagerOptions) {
     this._userId = options.userId ?? "";
     this.sendGatewayPayload = options.send;
+    this.logger =
+      options.logger != null
+        ? levelFilteredLogger(options.logger, options.logLevel ?? "warn")
+        : new NoopLogger();
     this.defaultSearchSource = options.defaultSearchSource ?? "ytsearch";
     this.storage = options.storageAdapter ?? new MemoryStorage();
     this.events = new EventDispatcher();
@@ -128,9 +135,15 @@ export class YuKumo {
     this.players = new PlayerManager(this);
     this.plugins = new PluginManager();
     this.plugins.onPluginError = (source, error) => {
-      this.events.emit(
-        "debug",
-        `Plugin error in ${source}: ${error instanceof Error ? error.message : String(error)}`,
+      const message = `Plugin error in ${source}: ${error instanceof Error ? error.message : String(error)}`;
+      this.logger.warn(message);
+      this.events.emit("debug", message);
+    };
+    this.events.onListenerError = (event, error) => {
+      // Straight to the logger — re-emitting through the dispatcher could
+      // recurse if the failing listener is itself on the debug event
+      this.logger.error(
+        `Unhandled error in "${event}" listener: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
       );
     };
 
@@ -380,21 +393,15 @@ export class YuKumo {
     await player.stop();
   }
 
-  /** Skips currently playing track and advances queue */
+  /**
+   * Skips the currently playing track. Delegates to player.skip() so autoplay,
+   * repeat handling, and queueEnd behave exactly like a natural track end.
+   */
   public async skip(guildId: string): Promise<TrackData | null> {
     const player = this.players.get(guildId);
     if (player == null) throw new Error(`No player found for guild ${guildId}`);
 
-    await player.stop();
-
-    const next = player.queue.next();
-    if (next != null) {
-      await player.playTrack(next);
-    } else {
-      return null;
-    }
-
-    return next;
+    return player.skip();
   }
 
   /** Plays the previous track in the queue history */
@@ -503,6 +510,18 @@ export class YuKumo {
   /** Subscribes to global client events */
   public on<E extends EventName>(event: E, callback: EventCallback<E>): this {
     this.events.on(event, callback);
+    return this;
+  }
+
+  /** Subscribes to a global client event for a single emission */
+  public once<E extends EventName>(event: E, callback: EventCallback<E>): this {
+    this.events.once(event, callback);
+    return this;
+  }
+
+  /** Unsubscribes a callback (or all callbacks when omitted) from a global client event */
+  public off<E extends EventName>(event: E, callback?: EventCallback<E>): this {
+    this.events.off(event, callback);
     return this;
   }
 

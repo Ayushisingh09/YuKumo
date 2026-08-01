@@ -8,6 +8,13 @@ type ListenerEntry = {
 export class EventDispatcher {
   private readonly listeners = new Map<string, ListenerEntry[]>();
 
+  /**
+   * Called when a listener throws or returns a rejecting promise.
+   * One bad listener still can't break the others, but the failure is
+   * surfaced here instead of vanishing (or becoming an unhandled rejection).
+   */
+  public onListenerError?: (event: string, error: unknown) => void;
+
   public on<E extends EventName>(event: E, callback: EventCallback<E>): this {
     const entries = this.listeners.get(event) ?? [];
     entries.push({ callback: callback as EventCallback<EventName>, once: false });
@@ -49,9 +56,14 @@ export class EventDispatcher {
 
     for (const entry of entries) {
       try {
-        (entry.callback as (...a: unknown[]) => void)(...args);
-      } catch {
-        // silently catch to prevent one listener from breaking others
+        const result = (entry.callback as (...a: unknown[]) => unknown)(...args);
+        if (result != null && typeof (result as Promise<unknown>).then === "function") {
+          (result as Promise<unknown>).then(undefined, (error: unknown) => {
+            this.onListenerError?.(event, error);
+          });
+        }
+      } catch (error) {
+        this.onListenerError?.(event, error);
       }
 
       if (entry.once) {

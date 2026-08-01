@@ -88,6 +88,12 @@ export class Player<TTrack extends TrackData = TrackData> {
   private readonly boundOnPlayerUpdate = (guildId: string, state: PlayerState) => {
     if (guildId !== this.guildId) return;
     this._position = state.position;
+    this.events.emit("playerUpdate", guildId, state as never);
+  };
+
+  private readonly boundOnTrackException = (guildId: string, track: TrackData, exception: unknown) => {
+    if (guildId !== this.guildId) return;
+    this.events.emit("trackException", guildId, track, exception);
   };
 
   public constructor(options: PlayerOptions) {
@@ -155,6 +161,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     ws.on("trackEnd", this.boundOnTrackEnd as never);
     ws.on("trackStart", this.boundOnTrackStart as never);
     ws.on("trackStuck", this.boundOnTrackStuck as never);
+    ws.on("trackException", this.boundOnTrackException as never);
     ws.on("playerUpdate", this.boundOnPlayerUpdate as never);
   }
 
@@ -163,6 +170,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     ws.off("trackEnd", this.boundOnTrackEnd as never);
     ws.off("trackStart", this.boundOnTrackStart as never);
     ws.off("trackStuck", this.boundOnTrackStuck as never);
+    ws.off("trackException", this.boundOnTrackException as never);
     ws.off("playerUpdate", this.boundOnPlayerUpdate as never);
   }
 
@@ -173,8 +181,9 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (this._destroyed) return;
 
     // A track that failed to load must not be repeated, or repeat-track mode
-    // would hammer the node with the same broken track forever
-    const forceAdvance = reason === "loadFailed" || reason === "stuck";
+    // would hammer the node with the same broken track forever; explicit skips
+    // advance past repeat-track too
+    const forceAdvance = reason === "loadFailed" || reason === "stuck" || reason === "skipped";
     const nextTrack = this.queue.next(forceAdvance);
     if (nextTrack != null) {
       try {
@@ -238,6 +247,32 @@ export class Player<TTrack extends TrackData = TrackData> {
   public on<E extends EventName>(event: E, callback: EventCallback<E>): this {
     this.events.on(event, callback);
     return this;
+  }
+
+  /** Subscribes to a player event for a single emission */
+  public once<E extends EventName>(event: E, callback: EventCallback<E>): this {
+    this.events.once(event, callback);
+    return this;
+  }
+
+  /** Unsubscribes a callback (or all callbacks when omitted) from a player event */
+  public off<E extends EventName>(event: E, callback?: EventCallback<E>): this {
+    this.events.off(event, callback);
+    return this;
+  }
+
+  /**
+   * Skips the current track, advancing through the same path as a natural
+   * track end — so autoplay, repeat handling, and queueEnd all still fire.
+   * Returns the track now playing, or null if the queue ended.
+   */
+  public async skip(): Promise<TTrack | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+
+    const skipped = this.currentTrack;
+    await this.stop();
+    await this.handleTrackEnd(skipped as TTrack, "skipped");
+    return this.currentTrack;
   }
 
   /** Reassigns player to a new Lavalink node (for node failover / load balancing) */
@@ -460,8 +495,8 @@ export class Player<TTrack extends TrackData = TrackData> {
     await this.setFilters();
   }
 
-  /** Sets the bassboost preset */
-  public async setBassboost(level: "low" | "medium" | "high" | "extreme"): Promise<void> {
+  /** Sets the bassboost preset; pass `false` to disable it */
+  public async setBassboost(level: "low" | "medium" | "high" | "extreme" | false): Promise<void> {
     this.filters.setBassBoost(level);
     await this.setFilters();
   }

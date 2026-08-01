@@ -54,6 +54,10 @@ export interface VoiceGatewayPayload {
 export interface ManagerOptions {
   nodes: NodeConfig[];
   userId?: string;
+  /** Custom logger for internal diagnostics; defaults to a no-op logger */
+  logger?: import("../utils/Logger.ts").Logger;
+  /** Minimum level passed through to the logger (default "warn"; "silent" disables) */
+  logLevel?: import("../utils/Logger.ts").LogLevel;
   /**
    * Sends a raw payload to the Discord gateway for the shard handling the guild.
    * Required for player.connect()/disconnect()/setVoiceChannel() to actually join
