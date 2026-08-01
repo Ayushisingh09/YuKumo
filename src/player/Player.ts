@@ -59,6 +59,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     endpoint: null,
     token: null,
   };
+  private _voiceStateSent: boolean = false;
   private _paused: boolean = false;
   private _destroyed: boolean = false;
   private _selfDeaf: boolean;
@@ -361,14 +362,14 @@ export class Player<TTrack extends TrackData = TrackData> {
         throw new PlayerNotConnectedError(this.guildId);
       }
 
-      const voicePayload =
-        this._voiceState.token && this._voiceState.endpoint && this._voiceState.sessionId
-          ? {
-              token: this._voiceState.token,
-              endpoint: this._voiceState.endpoint,
-              sessionId: this._voiceState.sessionId,
-            }
-          : undefined;
+      if (!this._voiceState.token || !this._voiceState.endpoint || !this._voiceState.sessionId) {
+        const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
+        if (globalVoice != null) {
+          this.setVoiceState(globalVoice);
+        }
+      }
+
+      await this.sendVoiceUpdate();
 
       await this._node.rest.updatePlayer(
         sessionId,
@@ -379,7 +380,6 @@ export class Player<TTrack extends TrackData = TrackData> {
           volume: this._volume,
           paused: this._paused,
           filters: hasFilterKeys ? filterPayload : undefined,
-          voice: voicePayload,
         },
         false,
       );
@@ -561,25 +561,44 @@ export class Player<TTrack extends TrackData = TrackData> {
    * region change, session change) so audio survives without waiting for the next play().
    */
   public async sendVoiceUpdate(): Promise<void> {
-    if (this._destroyed) return;
+    if (this._destroyed || this._voiceStateSent) return;
     const { token, endpoint, sessionId: voiceSessionId } = this._voiceState;
     if (!token || !endpoint || !voiceSessionId) return;
 
     const sessionId = this._node.rest.sessionId;
     if (sessionId == null) return;
 
-    await this._node.rest.updatePlayer(sessionId, this.guildId, {
-      voice: { token, endpoint, sessionId: voiceSessionId },
-    });
+    try {
+      await this._node.rest.updatePlayer(sessionId, this.guildId, {
+        voice: { token, endpoint, sessionId: voiceSessionId },
+      });
+      this._voiceStateSent = true;
+    } catch (err) {
+      // Ignore voice update error if player voice state is already registered
+    }
   }
 
   /** Replaces complete internal voice connection state */
   public setVoiceState(state: InternalVoiceState): void {
+    if (
+      this._voiceState.token !== state.token ||
+      this._voiceState.endpoint !== state.endpoint ||
+      this._voiceState.sessionId !== state.sessionId
+    ) {
+      this._voiceStateSent = false;
+    }
     this._voiceState = { ...state };
   }
 
   /** Updates partial internal voice connection state */
   public updateVoiceState(partial: Partial<InternalVoiceState>): void {
+    if (
+      (partial.token != null && partial.token !== this._voiceState.token) ||
+      (partial.endpoint != null && partial.endpoint !== this._voiceState.endpoint) ||
+      (partial.sessionId != null && partial.sessionId !== this._voiceState.sessionId)
+    ) {
+      this._voiceStateSent = false;
+    }
     Object.assign(this._voiceState, partial);
   }
 

@@ -28,6 +28,9 @@ export class DiscordJSAdapter {
 
     if (packet.t === "VOICE_STATE_UPDATE") {
       const d = packet.d;
+      const botId = this.client.user?.id || this.kumo.userId;
+      if (botId && String(d.user_id) !== botId) return;
+
       this.kumo.handleVoiceStateUpdate({
         guildId: String(d.guild_id ?? ""),
         sessionId: String(d.session_id ?? ""),

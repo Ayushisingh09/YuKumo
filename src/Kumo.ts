@@ -162,6 +162,11 @@ export class YuKumo {
     this.nodes.setUserId(userId);
   }
 
+  /** Gets the configured Discord Bot User ID */
+  public get userId(): string {
+    return this._userId;
+  }
+
   /** Connects to all configured Lavalink nodes and starts plugins */
   public async init(): Promise<void> {
     await this.nodes.connectAll();
@@ -342,6 +347,14 @@ export class YuKumo {
       selfDeaf: options.selfDeaf,
       selfMute: options.selfMute,
     });
+
+    const existingVoice = this.voice.getVoiceState(options.guildId);
+    if (existingVoice != null) {
+      player.setVoiceState(existingVoice);
+      if (existingVoice.token && existingVoice.endpoint && existingVoice.sessionId) {
+        await player.sendVoiceUpdate().catch(() => undefined);
+      }
+    }
 
     player.events.on("queueEnd", (guildId: string) => this.events.emit("queueEnd", guildId));
 
