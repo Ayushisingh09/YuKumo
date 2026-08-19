@@ -2,6 +2,17 @@
 
 All notable changes to the `yukumo` Lavalink client library will be documented in this file.
 
+## [1.8.0] - 2026-08-19
+
+### Added
+- **Offline Track Encoding**: `Track.encode(info)`, `Track.decode(encoded)`, and `Track.build(info, requester?)` are byte-for-byte compatible with Lavalink v4's native encoding (`@lavalink/encoding`) — build, encode, and decode tracks entirely on the client with no server round-trip. Also exported: `encodeTrackInfo()` / `decodeTrackInfo()`.
+- **Requester Support**: `kumo.search({ query, requester })` (and the `requester` field on `SearchOptions`) stamps the requester onto every returned track's `userData` — cache hits included, without polluting the shared cache. `Track.requester` now auto-populates from `userData.requester`.
+- **Player State Getters** (Poru/Riffy convention): `isPlaying`, `isPaused`, `isConnected`, `isDestroyed`, `isAutoplay`.
+- **Repeat-Mode Aliases** (Magmastream/erela.js convention): `setTrackRepeat(enabled)` / `setQueueRepeat(enabled)` plus `trackRepeat` / `queueRepeat` boolean getters/setters that never clobber the other repeat mode.
+- **Per-Filter Setters** (Shoukaku/lavalink-client style): `player.setEqualizer()`, `setKaraoke()`, `setTimescale()`, `setTremolo()`, `setVibrato()`, `setRotation()`, `setDistortion()`, `setChannelMix()`, `setLowPass()`, `setVolumeFilter()`. `player.setFilters()` now also accepts a raw Lavalink `FiltersObject` in addition to a `FilterChain`.
+- **Queue Slicing**: `player.get(start, end)` returns a queue slice (current track included) — Poru-compatible.
+- **Duration Utils**: `parseDuration("3:32")` → ms. `formatDuration()` consolidated into `UIHelpers` and reused by `Track.durationFormatted`.
+
 ## [1.7.0] - 2026-08-06
 
 ### Added
