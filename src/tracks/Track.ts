@@ -1,4 +1,6 @@
 import type { TrackData, TrackInfo } from "../types/protocol.ts";
+import { encodeTrackInfo, decodeTrackInfo } from "./TrackEncoder.ts";
+import { formatDuration } from "../utils/UIHelpers.ts";
 
 export class Track {
   public readonly encoded: string;
@@ -11,7 +13,7 @@ export class Track {
     this.encoded = data.encoded;
     this.info = { ...data.info };
     this.pluginInfo = { ...data.pluginInfo };
-    this.requester = requester;
+    this.requester = requester ?? data.userData?.requester;
     this.metadata = data.userData ?? {};
   }
 
@@ -87,6 +89,41 @@ export class Track {
   public static from(data: TrackData, requester?: unknown): Track {
     return new Track(data, requester);
   }
+
+  /** Encodes track info into Lavalink v4 base64 format locally (no server needed) */
+  public static encode(info: TrackInfo): string {
+    return encodeTrackInfo(info);
+  }
+
+  /** Decodes a Lavalink v4 base64 track into its raw info fields */
+  public static decode(encoded: string): TrackInfo {
+    return decodeTrackInfo(encoded);
+  }
+
+  /**
+   * Builds a usable track entirely on the client — encodes the info locally
+   * so it can be played without resolving against a node. Mirrors Wavelink's
+   * `PartialTrack.create()`.
+   */
+  public static build(
+    info: Partial<TrackInfo> & Pick<TrackInfo, "title" | "author">,
+    requester?: unknown,
+  ): Track {
+    const resolved: TrackInfo = {
+      identifier: info.identifier ?? info.title,
+      title: info.title,
+      author: info.author,
+      length: info.length ?? 0,
+      uri: info.uri ?? null,
+      sourceName: info.sourceName ?? "local",
+      position: info.position ?? 0,
+      isStream: info.isStream ?? false,
+      isSeekable: info.isSeekable ?? true,
+      artworkUrl: info.artworkUrl ?? null,
+      isrc: info.isrc ?? null,
+    };
+    return new Track({ encoded: encodeTrackInfo(resolved), info: resolved, pluginInfo: {} }, requester);
+  }
 }
 
 export class UnresolvedTrack {
@@ -150,16 +187,4 @@ export class Playlist {
     }
     return this.tracks[this.selectedTrack] as Track;
   }
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }

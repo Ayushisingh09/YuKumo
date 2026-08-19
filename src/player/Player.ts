@@ -1,7 +1,32 @@
 import type { Node } from "../node/Node.ts";
 import { Queue, type SerializedQueue } from "../queue/Queue.ts";
 import { FilterChain } from "../filters/FilterChain.ts";
-import type { TrackData, PlayerState } from "../types/protocol.ts";
+import {
+  VolumeFilter,
+  EqualizerFilter,
+  KaraokeFilter,
+  TimescaleFilter,
+  TremoloFilter,
+  VibratoFilter,
+  RotationFilter,
+  DistortionFilter,
+  ChannelMixFilter,
+  LowPassFilter,
+} from "../filters/Filters.ts";
+import type {
+  TrackData,
+  PlayerState,
+  FiltersObject,
+  EqualizerBand,
+  KaraokeSettings,
+  TimescaleSettings,
+  TremoloSettings,
+  VibratoSettings,
+  RotationSettings,
+  DistortionSettings,
+  ChannelMixSettings,
+  LowPassSettings,
+} from "../types/protocol.ts";
 import type { InternalVoiceState, RepeatMode } from "../types/internal.ts";
 import { PlayerNotConnectedError, PlayerError } from "../errors/index.ts";
 import { EventDispatcher } from "../ws/EventDispatcher.ts";
@@ -717,12 +742,56 @@ export class Player<TTrack extends TrackData = TrackData> {
   }
 
   /**
+   * Returns a slice of the queue. Without an end index it returns everything
+   * from `start` (including the currently playing track). Mirrors Poru's
+   * `player.get(index, end)`.
+   */
+  public get(start: number = 0, end?: number): TTrack[] {
+    const tracks = this.queue.tracksList;
+    const from = Math.max(0, Math.floor(start));
+    const to = end == null ? tracks.length : Math.min(tracks.length, Math.max(from, Math.floor(end)));
+    return tracks.slice(from, to);
+  }
+
+  /**
    * Sets the queue repeat mode.
    * @param mode "none", "track", or "queue"
    */
   public setLoop(mode: "none" | "track" | "queue"): this {
     this.queue.setRepeatMode(mode);
     this.scheduleStateSave();
+    return this;
+  }
+
+  /** Whether single-track repeat is on — Magmastream/erela.js style boolean */
+  public get trackRepeat(): boolean {
+    return this.queue.repeatMode === "track";
+  }
+
+  /** Turns single-track repeat on/off without disturbing queue repeat */
+  public set trackRepeat(enabled: boolean) {
+    this.setLoop(enabled ? "track" : this.queue.repeatMode === "queue" ? "queue" : "none");
+  }
+
+  /** Whether whole-queue repeat is on — Magmastream/erela.js style boolean */
+  public get queueRepeat(): boolean {
+    return this.queue.repeatMode === "queue";
+  }
+
+  /** Turns whole-queue repeat on/off without disturbing track repeat */
+  public set queueRepeat(enabled: boolean) {
+    this.setLoop(enabled ? "queue" : this.queue.repeatMode === "track" ? "track" : "none");
+  }
+
+  /** Turns single-track repeat on/off — Magmastream/erela.js convention */
+  public setTrackRepeat(enabled: boolean = true): this {
+    this.trackRepeat = enabled;
+    return this;
+  }
+
+  /** Turns whole-queue repeat on/off — Magmastream/erela.js convention */
+  public setQueueRepeat(enabled: boolean = true): this {
+    this.queueRepeat = enabled;
     return this;
   }
 
@@ -1281,11 +1350,14 @@ export class Player<TTrack extends TrackData = TrackData> {
     this._positionTimestamp = Date.now();
   }
 
-  /** Applies current filter chain payload to Lavalink node in real time */
-  public async setFilters(filters?: FilterChain): Promise<void> {
+  /**
+   * Applies current filter chain (or the given FilterChain / raw Lavalink
+   * filters object) to the node in real time.
+   */
+  public async setFilters(filters?: FilterChain | FiltersObject): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     if (filters != null) {
-      this.filters.apply(filters.toPayload());
+      this.filters.apply(filters instanceof FilterChain ? filters.toPayload() : filters);
     }
 
     const sessionId = this._node.rest.sessionId;
@@ -1317,6 +1389,68 @@ export class Player<TTrack extends TrackData = TrackData> {
   /** Sets the bassboost preset; pass `false` to disable it */
   public async setBassboost(level: "low" | "medium" | "high" | "extreme" | false): Promise<void> {
     this.filters.setBassBoost(level);
+    await this.setFilters();
+  }
+
+  // ─── Individual filter setters (Shoukaku / lavalink-client style) ────────
+
+  /** Replaces the equalizer bands filter and syncs it to the node */
+  public async setEqualizer(bands: EqualizerBand[] = []): Promise<void> {
+    this.filters.add(new EqualizerFilter(bands));
+    await this.setFilters();
+  }
+
+  /** Replaces the karaoke filter and syncs it to the node */
+  public async setKaraoke(settings?: KaraokeSettings): Promise<void> {
+    this.filters.add(new KaraokeFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the timescale (speed/pitch) filter and syncs it to the node */
+  public async setTimescale(settings?: TimescaleSettings): Promise<void> {
+    this.filters.add(new TimescaleFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the tremolo filter and syncs it to the node */
+  public async setTremolo(settings?: TremoloSettings): Promise<void> {
+    this.filters.add(new TremoloFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the vibrato filter and syncs it to the node */
+  public async setVibrato(settings?: VibratoSettings): Promise<void> {
+    this.filters.add(new VibratoFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the rotation (8D) filter and syncs it to the node */
+  public async setRotation(settings?: RotationSettings): Promise<void> {
+    this.filters.add(new RotationFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the distortion filter and syncs it to the node */
+  public async setDistortion(settings?: DistortionSettings): Promise<void> {
+    this.filters.add(new DistortionFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the channel mix filter and syncs it to the node */
+  public async setChannelMix(settings?: ChannelMixSettings): Promise<void> {
+    this.filters.add(new ChannelMixFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the low-pass filter and syncs it to the node */
+  public async setLowPass(settings?: LowPassSettings): Promise<void> {
+    this.filters.add(new LowPassFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the volume filter and syncs it to the node */
+  public async setVolumeFilter(volume: number = 1.0): Promise<void> {
+    this.filters.add(new VolumeFilter(volume));
     await this.setFilters();
   }
 
@@ -1644,5 +1778,30 @@ export class Player<TTrack extends TrackData = TrackData> {
   /** Gets whether player is destroyed */
   public get destroyed(): boolean {
     return this._destroyed;
+  }
+
+  /** Alias for `status === "playing" && !paused` — Poru/Riffy convention */
+  public get isPlaying(): boolean {
+    return this._status === "playing" && !this._paused;
+  }
+
+  /** Alias for `paused` — Poru/Riffy convention */
+  public get isPaused(): boolean {
+    return this._paused;
+  }
+
+  /** Alias for `connected` — Poru/Riffy convention */
+  public get isConnected(): boolean {
+    return this.connected;
+  }
+
+  /** Alias for `destroyed` — Poru/Riffy convention */
+  public get isDestroyed(): boolean {
+    return this._destroyed;
+  }
+
+  /** Alias for `getAutoplay()` — Poru/Riffy convention */
+  public get isAutoplay(): boolean {
+    return this.autoplay;
   }
 }

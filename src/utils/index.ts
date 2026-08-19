@@ -115,3 +115,4 @@ export * from "./Lyrics.ts";
 export * from "./SponsorBlock.ts";
 export * from "./UIHelpers.ts";
 export * from "./Middleware.ts";
+export * from "./format.ts";

@@ -16,9 +16,19 @@
 
 YuKumo is a lightweight client library built to interface seamlessly with **Lavalink v4** audio servers. It treats JavaScript (CommonJS & ESM) and TypeScript as equal first-class targets — JSDoc-powered autocomplete for JS consumers, and strict, fully-generic typing with zero `any` for TS projects.
 
-Built for production: multi-node load balancing, automatic failover, distributed state via Redis, and OpenMetrics observability out of the box.
+Built for production: multi-node load balancing, automatic failover, distributed state via Redis, and OpenMetrics observability out of the box. YuKumo also speaks **NodeLink** — the NodeLink-specific REST endpoints, voice receiver, mixer, lyrics, and gapless playback are detected automatically and exposed with zero extra configuration.
 
 **📖 Full documentation → [yukumo.vercel.app](https://yukumo.vercel.app)**
+
+### Highlights
+
+- 🎵 **Full Lavalink v4 coverage** — REST, WebSockets, route planner, plugins, and NodeLink extensions
+- ⚡ **Zero-dependency player resuming** — audio keeps playing across bot restarts
+- 🧩 **Plugin ecosystem** — LavaSrc, SponsorBlock, FloweryTTS, plus a custom plugin API
+- 🛰️ **Multi-node by default** — 9 load-balancing strategies, automatic player migration, failover
+- 💾 **State persistence** — queues and player snapshots survive restarts (Memory or Redis)
+- 📊 **Observability** — Prometheus/OpenMetrics exporter, flexible loggers, pings, and penalties
+- 📦 **Works without a server** — encode, decode, and build tracks entirely on the client
 
 ---
 
@@ -42,6 +52,8 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - Full coverage of the Lavalink v4 REST API (search, decode, sessions, route planner, plugins) and WebSocket event dispatch
 - `lavaSearch` support for concurrent multi-category queries — tracks, albums, artists, playlists, and text sources
 - High-performance `SearchCache` LRU cache with configurable capacity (`maxSize`) and TTL support
+- **Offline track encoding** — `Track.encode()`, `Track.decode()`, and `Track.build()` are byte-for-byte compatible with Lavalink v4's native format, so tracks can be encoded, decoded, and built entirely on the client with no server round-trip
+- **Requester support** — pass a `requester` to `search()` and it's stamped onto every returned track's `userData` (surviving cache hits) and auto-exposed via `track.requester`
 
 **Node Management**
 - 9 node-selection strategies: `RegionSelector`, `LeastUsed`, `LeastPenalty`, `CpuUsage`, `MemoryUsage`, `LowestPing`, `RoundRobin`, `Random`, and `CustomSelector`
@@ -49,23 +61,26 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - Built-in REST response caching with TTL, plus HTTP 429 `Retry-After` parsing and exponential backoff
 
 **Queueing & Player Controls**
-- Repeat modes (`off`, `track`, `queue`), play history, shuffle, and priority track injection via `priorityEnqueue`
-- Advanced queue helpers: `swap()`, `skipTo()`, `removeRange()`, and `clearExceptCurrent()`
+- Repeat modes (`off`, `track`, `queue`) — including Magmastream/erela-style `setTrackRepeat()` / `setQueueRepeat()` and `trackRepeat` / `queueRepeat` booleans
+- Play history, shuffle, and priority track injection via `priorityEnqueue`
+- Advanced queue helpers: `swap()`, `skipTo()`, `removeRange()`, `clearExceptCurrent()`, and Poru-style `player.get(start, end)` queue slicing
 - Smart Autoplay recommendation engine (`setAutoplay()`) with `autoplayTrackAdded` event notifications
 - Queue state serialization (`export()` / `import()`) and pagination (`getPage`)
+- State getters in every convention: `status`, `isPlaying`, `isPaused`, `isConnected`, `isDestroyed`, `isAutoplay`, `voiceId`/`textId`, `currentTrack`
 
 **Audio & Filters**
-- Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass
+- Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass, plus a raw `FiltersObject` passthrough in `setFilters()`
 - High-level presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `setSlowedReverb()`, `set3DAudio()`, `setPitchShift()`, `setVoiceIsolation()`
-- Global custom named filter preset registry (`FilterChain.registerPreset()` / `applyPreset()`)
+- Per-filter setters in Shoukaku/lavalink-client style: `setEqualizer()`, `setKaraoke()`, `setTimescale()`, `setTremolo()`, `setVibrato()`, `setRotation()`, `setDistortion()`, `setChannelMix()`, `setLowPass()`, `setVolumeFilter()`
+- Global custom named filter preset registry (`FilterChain.registerPreset()` / `applyPreset()`) and `setAudioOutput("mono" | "stereo" | "left" | "right")` routing
 
-**Resilience & Protection** <sup>new in 1.6</sup>
+**Resilience & Protection**
 - WebSocket heartbeat with pong-timeout detection — half-open dead node connections are terminated and auto-reconnected
 - Error-rate protection (`maxErrorsPerTime`) destroys runaway players; `minAutoPlayMs` stops autoplay error spam
 - `queueEmptyDestroyMs` auto-destroy timer after queue end, and standardized `DestroyReasons` on every `playerDestroy` event
 - Interpolated `player.position` between server updates, plus `player.ping` (`{ ws, lavalink }`)
 
-**Persistence** <sup>new in 1.6</sup>
+**Persistence**
 - Queue persistence (`queueOptions.persist`): every queue mutation auto-saves to your `StorageAdapter` (Memory/Redis) and restores after a restart
 - Full player state snapshots via `player.toJSON()`; queue change hook via `queue.onChanged`
 
@@ -82,7 +97,7 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - UI & Progress Bar helpers (`getProgressBar()`, `formatDuration()`, `createQueueEmbedData()`)
 - Middleware interceptor registry (`MiddlewareRegistry` / `useBeforeTrackStart`)
 
-**Control & Governance** <sup>new in 1.6</sup>
+**Control & Governance**
 - Rich play options: `play(track, { position, endTime, noReplace, paused, volume })`
 - Link policy: `linksAllowed`, `linksWhitelist`, `linksBlacklist` (string or RegExp) gate URL queries
 - Custom HTTP headers per manager or per node; custom `Player` subclass via `playerClass`
@@ -111,6 +126,16 @@ bun add yukumo
 ```bash
 pnpm add yukumo
 ```
+
+### Compatibility
+
+| Target | Support |
+|---|---|
+| **Node.js** | 18.0.0+ (ESM & CommonJS) |
+| **Lavalink** | v4.x (`lavalink.dev`) |
+| **NodeLink** | `dev` branch — auto-detected, incl. voice receiver, mixer, lyrics & gapless |
+| **Discord libraries** | `discord.js` v14, `Eris`, `Seyfert`, `Oceanic.js`, `Davey`, `Discordeno`, or a raw gateway adapter |
+| **Bundlers** | Zero runtime dependencies (only `ws`) |
 
 ---
 

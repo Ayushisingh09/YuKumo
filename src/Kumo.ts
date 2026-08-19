@@ -63,6 +63,22 @@ function loadResultToSearchResult(result: LoadResult): SearchResult {
   }
 }
 
+/**
+ * Stamps the search requester onto each track's userData (Lavalink v4
+ * convention used by lavalink-client/Poru). Returns a new result so the
+ * shared search cache is never polluted with a stale requester.
+ */
+function attachRequester(result: SearchResult, requester: unknown): SearchResult {
+  if (requester === undefined || result.tracks.length === 0) return result;
+  return {
+    ...result,
+    tracks: result.tracks.map((track) => ({
+      ...track,
+      userData: { requester, ...(track.userData ?? {}) },
+    })),
+  };
+}
+
 function formatSourcePrefix(source: string): string {
   const lower = source.toLowerCase().trim();
   const map: Record<string, string> = {
@@ -447,7 +463,7 @@ export class YuKumo {
     // (and cached queries keep working while all nodes are down)
     const cached = this.searchCache.get<SearchResult>(identifier);
     if (cached != null) {
-      return cached;
+      return attachRequester(cached, resolved.requester);
     }
 
     const nodeName = resolved.nodeName;
@@ -465,11 +481,13 @@ export class YuKumo {
         return { loadType: "empty", tracks: [] };
       }
 
+      // Results are cached without a requester so the cache stays reusable —
+      // the requester is attached per-call on return.
       if (afterResult.loadType !== "error" && afterResult.loadType !== "empty") {
         this.searchCache.set(identifier, afterResult);
       }
 
-      return afterResult;
+      return attachRequester(afterResult, resolved.requester);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return {

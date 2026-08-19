@@ -3,6 +3,8 @@ import { Queue } from "./queue/Queue.ts";
 import { FilterChain, AudioOutputs } from "./filters/FilterChain.ts";
 import { parseLavalinkConnUrl } from "./utils/index.ts";
 import { YuKumo } from "./Kumo.ts";
+import { Track } from "./tracks/Track.ts";
+import type { NodeConfig } from "./types/internal.ts";
 
 interface FakeTrack {
   encoded: string;
@@ -111,5 +113,81 @@ describe("YuKumo link policy", () => {
     expect((await kumo.search("https://youtube.com/watch?v=abc")).loadType).toBe("empty");
     // non-URL queries are never gated
     expect((await kumo.search("never gonna give you up")).loadType).toBe("empty");
+  });
+});
+
+describe("search requester propagation", () => {
+  const nodeConfigs: NodeConfig[] = [
+    { host: "localhost", port: 2333, password: "youshallnotpass", name: "default" },
+  ];
+
+  function mockConnectedNode(): { kumo: YuKumo; node: any } {
+    const kumo = new YuKumo({ nodes: nodeConfigs });
+    const node = kumo.nodes.get("default") as any;
+    Object.defineProperty(node.ws, "state", { value: "connected", configurable: true });
+    node.rest.loadTracks = vi.fn().mockResolvedValue({
+      loadType: "search",
+      data: [
+        {
+          encoded: "AAA",
+          info: {
+            identifier: "id",
+            isSeekable: true,
+            author: "A",
+            length: 1000,
+            isStream: false,
+            position: 0,
+            title: "T",
+            uri: null,
+            artworkUrl: null,
+            isrc: null,
+            sourceName: "youtube",
+          },
+          pluginInfo: {},
+        },
+      ],
+    });
+    return { kumo, node };
+  }
+
+  it("stamps the requester onto returned track userData", async () => {
+    const { kumo } = mockConnectedNode();
+    const requester = { id: "user-1" };
+    const result = await kumo.search({ query: "test", requester });
+
+    expect(result.loadType).toBe("search");
+    expect(result.tracks[0]?.userData?.requester).toEqual(requester);
+  });
+
+  it("does not leak a requester across cache hits", async () => {
+    const { kumo } = mockConnectedNode();
+    const first = await kumo.search({ query: "shared", requester: { id: "user-1" } });
+    const second = await kumo.search({ query: "shared", requester: { id: "user-2" } });
+
+    expect(first.tracks[0]?.userData?.requester).toEqual({ id: "user-1" });
+    expect(second.tracks[0]?.userData?.requester).toEqual({ id: "user-2" });
+  });
+
+  it("wires userData.requester into the Track.requester property", () => {
+    const data = {
+      encoded: "AAA",
+      info: {
+        identifier: "id",
+        isSeekable: true,
+        author: "A",
+        length: 1000,
+        isStream: false,
+        position: 0,
+        title: "T",
+        uri: null,
+        artworkUrl: null,
+        isrc: null,
+        sourceName: "youtube",
+      },
+      pluginInfo: {},
+      userData: { requester: { id: "embedded" } },
+    };
+    const track = new Track(data);
+    expect(track.requester).toEqual({ id: "embedded" });
   });
 });
