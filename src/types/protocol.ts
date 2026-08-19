@@ -163,13 +163,18 @@ export interface MemoryStats {
 export interface CpuStats {
   cores: number;
   systemLoad: number;
-  lavalinkLoad: number;
+  /** Lavalink v4 load metric */
+  lavalinkLoad?: number;
+  /** NodeLink's name for the same metric */
+  nodelinkLoad?: number;
 }
 
 export interface FrameStats {
   sent: number;
   nulled: number;
   deficit: number;
+  /** NodeLink only */
+  expected?: number;
 }
 
 export interface StatsOp {
@@ -316,6 +321,156 @@ export interface LowPassSettings {
   smoothing?: number;
 }
 
+// ─── NodeLink-only filter settings ────────────────────────────────────────
+
+export interface EchoSettings {
+  /** Delay in milliseconds (0–2000) */
+  delay?: number;
+  /** Feedback 0–1 */
+  feedback?: number;
+  /** Wet/dry mix 0–1 */
+  mix?: number;
+}
+
+export interface ChorusSettings {
+  rate?: number;
+  /** 0–1 */
+  depth?: number;
+  /** Delay in ms (max 45) */
+  delay?: number;
+  /** 0–1 */
+  mix?: number;
+  /** 0–0.95 */
+  feedback?: number;
+}
+
+export interface CompressorSettings {
+  /** Threshold in dB */
+  threshold?: number;
+  /** Ratio >= 1 */
+  ratio?: number;
+  /** Attack in seconds */
+  attack?: number;
+  /** Release in seconds */
+  release?: number;
+  /** Makeup gain in dB */
+  makeupGain?: number;
+}
+
+export interface PhaserSettings {
+  /** Number of stages (2–12) */
+  stages?: number;
+  rate?: number;
+  /** 0–1 */
+  depth?: number;
+  /** 0–0.9 */
+  feedback?: number;
+  /** 0–1 */
+  mix?: number;
+  minFrequency?: number;
+  maxFrequency?: number;
+}
+
+export interface HighPassSettings {
+  /** >1 activates the filter; 0 disables it */
+  smoothing?: number;
+}
+
+export interface FlangerSettings {
+  rate?: number;
+  /** 0–1 */
+  depth?: number;
+  /** 0–0.95 */
+  feedback?: number;
+}
+
+export interface ReverbSettings {
+  /** 0–1 */
+  mix?: number;
+  /** 0–1 */
+  roomSize?: number;
+  /** 0–1 */
+  damping?: number;
+  /** 0–1 */
+  width?: number;
+  /** Optional custom comb delays (ms) */
+  delays?: number[];
+  /** Optional custom comb gains (>= 0.95) */
+  gains?: number[];
+}
+
+export interface SpatialSettings {
+  /** 0–1 */
+  depth?: number;
+  rate?: number;
+}
+
+export interface PhonographSettings {
+  frequency?: number;
+  /** 0–1 */
+  depth?: number;
+  /** 0–1 */
+  crackle?: number;
+  /** 0–1 */
+  flutter?: number;
+  /** 0–1 */
+  room?: number;
+  /** 0–1 */
+  micAgc?: number;
+  /** 0–1 */
+  drive?: number;
+}
+
+export interface TesseractSettings {
+  /** > 0.001 activates the filter */
+  rotationHz?: number;
+}
+
+// ─── NodeLink fading / crossfade settings ─────────────────────────────────
+
+export type FadeType = "volume" | "tape" | "scratch" | "both";
+export type FadeCurve = "linear" | "exponential" | "logarithmic" | "s-curve";
+
+export interface FadeSection {
+  /** Duration in milliseconds */
+  duration: number;
+  curve?: FadeCurve;
+  type?: FadeType;
+}
+
+export interface FadingSettings {
+  enabled?: boolean;
+  trackStart?: FadeSection;
+  trackEnd?: FadeSection;
+  trackStop?: FadeSection;
+  seek?: FadeSection;
+  pause?: FadeSection;
+  resume?: FadeSection;
+  /** Nested under `fading` on the NodeLink wire format */
+  ducking?: {
+    enabled?: boolean;
+    /** Duration in ms (default 500) */
+    duration?: number;
+    /** 0–1 (default 0.3) */
+    targetVolume?: number;
+    curve?: FadeCurve;
+  };
+}
+
+export interface CrossfadeSettings {
+  enabled: boolean;
+  /** Duration in ms (0–30000, default 5000) */
+  duration?: number;
+  /** "linear" | "sine" | "sinusoidal" (default sinusoidal) */
+  curve?: "linear" | "sine" | "sinusoidal";
+  /** "stream" | "preload" (default preload) */
+  mode?: "stream" | "preload";
+  /** 20–30000 (default 250) */
+  minBufferMs?: number;
+  /** 0–30000 (default 0) */
+  bufferMs?: number;
+}
+
 export interface FiltersObject {
   volume?: number;
   equalizer?: EqualizerBand[];
@@ -327,6 +482,17 @@ export interface FiltersObject {
   distortion?: DistortionSettings;
   channelMix?: ChannelMixSettings;
   lowPass?: LowPassSettings;
+  /** NodeLink-only filters */
+  echo?: EchoSettings;
+  chorus?: ChorusSettings;
+  compressor?: CompressorSettings;
+  phaser?: PhaserSettings;
+  highpass?: HighPassSettings;
+  flanger?: FlangerSettings;
+  reverb?: ReverbSettings;
+  spatial?: SpatialSettings;
+  phonograph?: PhonographSettings;
+  tesseract?: TesseractSettings;
   pluginFilters?: Record<string, Record<string, unknown>>;
 }
 
@@ -467,4 +633,93 @@ export interface LavaSearchResult {
     pluginInfo: Record<string, unknown>;
   }>;
   pluginInfo?: Record<string, unknown>;
+}
+
+// ─── NodeLink-exclusive protocol types ────────────────────────────────────
+
+export interface SponsorBlockSegment {
+  uuid?: string;
+  category?: string;
+  start: number;
+  end: number;
+}
+
+export interface SponsorBlockState {
+  enabled: boolean;
+  categories: string[];
+  actionTypes: string[];
+  segments: SponsorBlockSegment[];
+  lastSkippedUuid?: string | null;
+  skipMarginMs?: number;
+}
+
+export interface NodeLinkGroup {
+  id: string;
+  guildIds: string[];
+  createdAt: number;
+}
+
+export interface NodeLinkGroupUpdateBody {
+  players?: { add?: string[]; remove?: string[] };
+  track?: {
+    encoded?: string | null;
+    identifier?: string;
+    userData?: Record<string, unknown>;
+    audioTrackId?: string;
+    language?: string;
+  };
+  position?: number;
+  endTime?: number | null;
+  volume?: number;
+  paused?: boolean;
+  filters?: FiltersObject;
+  fading?: FadingSettings;
+  loudnessNormalizer?: boolean;
+  ducking?: boolean;
+}
+
+export interface LoadStreamOptions {
+  /** Encoded track to stream */
+  encodedTrack: string;
+  /** Volume 0–1000 (default 100) */
+  volume?: number;
+  /** Position in milliseconds (default 0) */
+  position?: number;
+  filters?: FiltersObject;
+}
+
+export interface TrackStreamResult {
+  url: string;
+  protocol: string;
+  format: string;
+  newTrack?: TrackData;
+  exception?: ExceptionData;
+  additionalData?: Record<string, unknown>;
+}
+
+export interface YouTubeConfig {
+  refreshToken: string | null;
+  visitorData: string | null;
+  isConfigured: boolean;
+  isValid?: boolean | null;
+}
+
+export interface WorkerInfo {
+  id: number;
+  [key: string]: unknown;
+}
+
+/** NodeLink encodeTrack payload — mirrors the wire `info` object */
+export interface EncodeTrackPayload {
+  title: string;
+  author: string;
+  length: number;
+  identifier: string;
+  isStream: boolean;
+  uri?: string | null;
+  artworkUrl?: string | null;
+  isrc?: string | null;
+  sourceName: string;
+  position: number;
+  details?: (string | null)[];
 }

@@ -49,12 +49,15 @@ export class EventDispatcher {
   }
 
   public emit<E extends EventName>(event: E, ...args: Parameters<EventCallback<E>>): void {
-    const entries = this.listeners.get(event);
-    if (entries === undefined) return;
+    const current = this.listeners.get(event);
+    if (current === undefined) return;
 
+    // Snapshot before iterating — a listener added or removed during this emit
+    // must not be invoked (nor the live array mutated while it's being walked)
+    const snapshot = current.slice();
     const toRemove: ListenerEntry[] = [];
 
-    for (const entry of entries) {
+    for (const entry of snapshot) {
       try {
         const result = (entry.callback as (...a: unknown[]) => unknown)(...args);
         if (result != null && typeof (result as Promise<unknown>).then === "function") {
@@ -72,7 +75,9 @@ export class EventDispatcher {
     }
 
     if (toRemove.length > 0) {
-      const remaining = entries.filter((e) => !toRemove.includes(e));
+      const live = this.listeners.get(event);
+      if (live === undefined) return;
+      const remaining = live.filter((e) => !toRemove.includes(e));
       if (remaining.length === 0) {
         this.listeners.delete(event);
       } else {

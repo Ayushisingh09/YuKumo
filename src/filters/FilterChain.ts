@@ -10,6 +10,16 @@ import {
   DistortionFilter,
   ChannelMixFilter,
   LowPassFilter,
+  EchoFilter,
+  ChorusFilter,
+  CompressorFilter,
+  PhaserFilter,
+  HighPassFilter,
+  FlangerFilter,
+  ReverbFilter,
+  SpatialFilter,
+  PhonographFilter,
+  TesseractFilter,
 } from "./Filters.ts";
 import type { FiltersObject } from "../types/protocol.ts";
 
@@ -119,6 +129,46 @@ export class FilterChain {
 
     if (payload.lowPass !== undefined) {
       this.add(new LowPassFilter(payload.lowPass));
+    }
+
+    if (payload.echo !== undefined) {
+      this.add(new EchoFilter(payload.echo));
+    }
+
+    if (payload.chorus !== undefined) {
+      this.add(new ChorusFilter(payload.chorus));
+    }
+
+    if (payload.compressor !== undefined) {
+      this.add(new CompressorFilter(payload.compressor));
+    }
+
+    if (payload.phaser !== undefined) {
+      this.add(new PhaserFilter(payload.phaser));
+    }
+
+    if (payload.highpass !== undefined) {
+      this.add(new HighPassFilter(payload.highpass));
+    }
+
+    if (payload.flanger !== undefined) {
+      this.add(new FlangerFilter(payload.flanger));
+    }
+
+    if (payload.reverb !== undefined) {
+      this.add(new ReverbFilter(payload.reverb));
+    }
+
+    if (payload.spatial !== undefined) {
+      this.add(new SpatialFilter(payload.spatial));
+    }
+
+    if (payload.phonograph !== undefined) {
+      this.add(new PhonographFilter(payload.phonograph));
+    }
+
+    if (payload.tesseract !== undefined) {
+      this.add(new TesseractFilter(payload.tesseract));
     }
   }
 

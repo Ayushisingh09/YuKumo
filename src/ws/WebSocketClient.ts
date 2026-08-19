@@ -359,6 +359,51 @@ export class WebSocketClient {
         this.events.emit("mixEnded", guildId, event);
         break;
       }
+      // NodeLink playback/connection state events
+      case "VolumeChangedEvent": {
+        this.events.emit("volumeChanged", guildId, (event.volume as number) ?? 0);
+        break;
+      }
+      case "SeekEvent": {
+        this.events.emit("playerSeek", guildId, (event.position as number) ?? 0);
+        break;
+      }
+      case "PauseEvent": {
+        this.events.emit("playerPause", guildId, (event.paused as boolean) ?? false);
+        break;
+      }
+      case "FiltersChangedEvent": {
+        this.events.emit("filtersChanged", guildId, event.filters ?? event);
+        break;
+      }
+      case "StreamMetadataEvent": {
+        this.events.emit("streamMetadata", guildId, event.metadata ?? event);
+        break;
+      }
+      case "WorkerFailedEvent": {
+        const affected = (event.affectedGuilds as string[] | undefined) ?? [guildId];
+        const message = (event.message as string | undefined) ?? "NodeLink worker failed";
+        for (const guild of affected) {
+          this.events.emit("workerFailed", guild, message);
+        }
+        break;
+      }
+      case "PlayerConnectedEvent": {
+        this.events.emit("playerConnected", guildId);
+        break;
+      }
+      case "PlayerReconnectingEvent": {
+        this.events.emit("playerReconnecting", guildId);
+        break;
+      }
+      case "PlayerCreatedEvent":
+      case "PlayerDestroyedEvent":
+      case "ConnectionStatusEvent":
+      case "EternalBoxInfoEvent":
+      case "EternalBoxJumpEvent": {
+        this.events.emit("debug", `${String(event.type)} for guild ${guildId}: ${JSON.stringify(event)}`);
+        break;
+      }
       default: {
         this.events.emit("debug", `Unknown event type: ${String(event.type)}`);
       }

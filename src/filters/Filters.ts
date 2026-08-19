@@ -8,6 +8,16 @@ import type {
   DistortionSettings,
   ChannelMixSettings,
   LowPassSettings,
+  EchoSettings,
+  ChorusSettings,
+  CompressorSettings,
+  PhaserSettings,
+  HighPassSettings,
+  FlangerSettings,
+  ReverbSettings,
+  SpatialSettings,
+  PhonographSettings,
+  TesseractSettings,
 } from "../types/protocol.ts";
 
 export interface Filter {
@@ -193,5 +203,103 @@ export class LowPassFilter implements Filter {
     const hasAny = keys.some((k) => this.settings[k] !== undefined);
     if (!hasAny) return {};
     return { lowPass: this.settings };
+  }
+}
+
+// ─── NodeLink-only filters ────────────────────────────────────────────────
+
+abstract class NodeLinkFilter<S> implements Filter {
+  public abstract readonly name: string;
+  public settings: S;
+
+  protected constructor(settings: S) {
+    this.settings = { ...(settings as Record<string, unknown>) } as S;
+  }
+
+  public serialize(): Record<string, unknown> {
+    const keys = Object.keys(this.settings as Record<string, unknown>);
+    const hasAny = keys.some((k) => (this.settings as Record<string, unknown>)[k] !== undefined);
+    if (!hasAny) return {};
+    return { [this.name]: this.settings };
+  }
+}
+
+export class EchoFilter extends NodeLinkFilter<EchoSettings> implements Filter {
+  public readonly name = "echo";
+
+  public constructor(settings?: EchoSettings) {
+    super((settings ?? {}) as EchoSettings);
+  }
+}
+
+export class ChorusFilter extends NodeLinkFilter<ChorusSettings> implements Filter {
+  public readonly name = "chorus";
+
+  public constructor(settings?: ChorusSettings) {
+    super((settings ?? {}) as ChorusSettings);
+  }
+}
+
+export class CompressorFilter extends NodeLinkFilter<CompressorSettings> implements Filter {
+  public readonly name = "compressor";
+
+  public constructor(settings?: CompressorSettings) {
+    super((settings ?? {}) as CompressorSettings);
+  }
+}
+
+export class PhaserFilter extends NodeLinkFilter<PhaserSettings> implements Filter {
+  public readonly name = "phaser";
+
+  public constructor(settings?: PhaserSettings) {
+    super((settings ?? {}) as PhaserSettings);
+  }
+}
+
+export class HighPassFilter extends NodeLinkFilter<HighPassSettings> implements Filter {
+  public readonly name = "highpass";
+
+  public constructor(settings?: HighPassSettings) {
+    super((settings ?? {}) as HighPassSettings);
+  }
+}
+
+export class FlangerFilter extends NodeLinkFilter<FlangerSettings> implements Filter {
+  public readonly name = "flanger";
+
+  public constructor(settings?: FlangerSettings) {
+    super((settings ?? {}) as FlangerSettings);
+  }
+}
+
+export class ReverbFilter extends NodeLinkFilter<ReverbSettings> implements Filter {
+  public readonly name = "reverb";
+
+  public constructor(settings?: ReverbSettings) {
+    super((settings ?? {}) as ReverbSettings);
+  }
+}
+
+export class SpatialFilter extends NodeLinkFilter<SpatialSettings> implements Filter {
+  public readonly name = "spatial";
+
+  public constructor(settings?: SpatialSettings) {
+    super((settings ?? {}) as SpatialSettings);
+  }
+}
+
+export class PhonographFilter extends NodeLinkFilter<PhonographSettings> implements Filter {
+  public readonly name = "phonograph";
+
+  public constructor(settings?: PhonographSettings) {
+    super((settings ?? {}) as PhonographSettings);
+  }
+}
+
+export class TesseractFilter extends NodeLinkFilter<TesseractSettings> implements Filter {
+  public readonly name = "tesseract";
+
+  public constructor(settings?: TesseractSettings) {
+    super((settings ?? {}) as TesseractSettings);
   }
 }

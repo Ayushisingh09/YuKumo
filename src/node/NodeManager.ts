@@ -5,7 +5,7 @@ import type { NodeConfig } from "../types/internal.ts";
 
 export class NodeManager {
   private readonly nodes = new Map<string, Node>();
-  private readonly userId: string;
+  private userId: string;
   private selector: NodeSelector;
 
   public constructor(userId: string, selector?: NodeSelector) {
@@ -14,7 +14,7 @@ export class NodeManager {
   }
 
   public setUserId(userId: string): void {
-    (this as any).userId = userId;
+    this.userId = userId;
     for (const node of this.nodes.values()) {
       node.setUserId(userId);
     }

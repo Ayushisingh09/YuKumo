@@ -1,5 +1,13 @@
 import type { Node } from "./Node.ts";
 
+/** Resolves the CPU load metric regardless of server type (Lavalink vs NodeLink) */
+function nodeCpuLoad(node: Node): number | null {
+  const cpu = node.stats?.cpu;
+  if (cpu == null) return null;
+  const load = cpu.lavalinkLoad ?? cpu.nodelinkLoad;
+  return load != null && Number.isFinite(load) && load >= 0 ? load : null;
+}
+
 /**
  * Interface for custom node load balancing selectors.
  */
@@ -98,11 +106,11 @@ export class CpuUsageSelector implements NodeSelector {
     if (connected.length === 0) return null;
 
     let best = connected[0] as Node;
-    let minCpu = best.stats?.cpu.lavalinkLoad ?? Number.MAX_VALUE;
+    let minCpu = nodeCpuLoad(best) ?? Number.MAX_VALUE;
 
     for (let i = 1; i < connected.length; i++) {
       const node = connected[i] as Node;
-      const cpu = node.stats?.cpu.lavalinkLoad ?? Number.MAX_VALUE;
+      const cpu = nodeCpuLoad(node) ?? Number.MAX_VALUE;
       if (cpu < minCpu) {
         best = node;
         minCpu = cpu;

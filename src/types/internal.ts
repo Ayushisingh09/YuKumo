@@ -13,8 +13,8 @@ export interface NodeConfig {
   resuming?: boolean;
   /**
    * Marks this node as NodeLink (PerformanC's Lavalink alternative).
-   * Auto-detected from /v4/info (`isNodelink`) when omitted. NodeLink does not
-   * support session resuming, so resuming is skipped for NodeLink nodes.
+   * Auto-detected from /v4/info (`isNodelink`) when omitted. NodeLink v3+
+   * supports session resuming just like Lavalink.
    */
   isNodeLink?: boolean;
   maxRetries?: number;
@@ -45,12 +45,17 @@ export interface NodeStats {
   cpu: {
     cores: number;
     systemLoad: number;
-    lavalinkLoad: number;
+    /** Lavalink v4 load metric */
+    lavalinkLoad?: number;
+    /** NodeLink's name for the same metric */
+    nodelinkLoad?: number;
   };
   frameStats: {
     sent: number;
     nulled: number;
     deficit: number;
+    /** NodeLink only */
+    expected?: number;
   } | null;
 }
 
@@ -270,6 +275,22 @@ export type EventMap = {
   mixStarted: (guildId: string, mix: unknown) => void;
   /** NodeLink mixer: a mix layer ended */
   mixEnded: (guildId: string, mix: unknown) => void;
+  /** NodeLink: player volume changed */
+  volumeChanged: (guildId: string, volume: number) => void;
+  /** NodeLink: player seeked */
+  playerSeek: (guildId: string, position: number) => void;
+  /** NodeLink: player pause state changed */
+  playerPause: (guildId: string, paused: boolean) => void;
+  /** NodeLink: player filters changed */
+  filtersChanged: (guildId: string, filters: unknown) => void;
+  /** NodeLink: stream metadata (thumbnail/views) for the current track */
+  streamMetadata: (guildId: string, metadata: unknown) => void;
+  /** NodeLink: a worker failed, affecting guilds */
+  workerFailed: (guildId: string, message: string) => void;
+  /** NodeLink: player voice connection status changed */
+  playerConnected: (guildId: string) => void;
+  /** NodeLink: player voice connection is reconnecting */
+  playerReconnecting: (guildId: string) => void;
 };
 
 export type EventName = keyof EventMap;

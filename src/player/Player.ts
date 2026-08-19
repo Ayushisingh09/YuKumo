@@ -12,9 +12,20 @@ import {
   DistortionFilter,
   ChannelMixFilter,
   LowPassFilter,
+  EchoFilter,
+  ChorusFilter,
+  CompressorFilter,
+  PhaserFilter,
+  HighPassFilter,
+  FlangerFilter,
+  ReverbFilter,
+  SpatialFilter,
+  PhonographFilter,
+  TesseractFilter,
 } from "../filters/Filters.ts";
 import type {
   TrackData,
+  PlayerData,
   PlayerState,
   FiltersObject,
   EqualizerBand,
@@ -26,6 +37,27 @@ import type {
   DistortionSettings,
   ChannelMixSettings,
   LowPassSettings,
+  EchoSettings,
+  ChorusSettings,
+  CompressorSettings,
+  PhaserSettings,
+  HighPassSettings,
+  FlangerSettings,
+  ReverbSettings,
+  SpatialSettings,
+  PhonographSettings,
+  TesseractSettings,
+  FadingSettings,
+  CrossfadeSettings,
+  SponsorBlockState,
+  SponsorBlockSegment,
+  NodeLinkGroup,
+  NodeLinkGroupUpdateBody,
+  LoadStreamOptions,
+  TrackStreamResult,
+  YouTubeConfig,
+  WorkerInfo,
+  EncodeTrackPayload,
 } from "../types/protocol.ts";
 import type { InternalVoiceState, RepeatMode } from "../types/internal.ts";
 import { PlayerNotConnectedError, PlayerError } from "../errors/index.ts";
@@ -51,6 +83,10 @@ export interface PlayOptions {
   paused?: boolean;
   /** Volume to apply with this play request (0-1000) */
   volume?: number;
+  /** NodeLink only: select an alternate audio stream (see pluginInfo.audioTracks) */
+  audioTrackId?: string;
+  /** NodeLink only: prefer a specific audio track language */
+  language?: string;
 }
 
 /** Serializable snapshot of the full player state */
@@ -69,6 +105,14 @@ export interface PlayerJson {
   queue: SerializedQueue<TrackData>;
   filters: Record<string, unknown>;
   voiceState: InternalVoiceState;
+  /** NodeLink only */
+  loudnessNormalizer?: boolean;
+  /** NodeLink only */
+  ducking?: boolean;
+  /** NodeLink only */
+  fading?: FadingSettings | null;
+  /** NodeLink only */
+  crossfade?: CrossfadeSettings | null;
 }
 
 export interface PlayerOptions {
@@ -170,6 +214,10 @@ export class Player<TTrack extends TrackData = TrackData> {
   private _voiceStateSent: boolean = false;
   private _paused: boolean = false;
   private _destroyed: boolean = false;
+  private _loudnessNormalizer: boolean = false;
+  private _ducking: boolean = false;
+  private _fading: FadingSettings | null = null;
+  private _crossfade: CrossfadeSettings | null = null;
   private _selfDeaf: boolean;
   private _selfMute: boolean;
   private voiceReadyWaiters: Array<{
@@ -828,25 +876,71 @@ export class Player<TTrack extends TrackData = TrackData> {
   }
 
   /**
-   * Sets SponsorBlock categories to auto-skip (requires the SponsorBlock
-   * plugin on the node). Emits segmentsLoaded/segmentSkipped/chapterStarted/
-   * chaptersLoaded events on this player.
+   * Sets SponsorBlock categories to auto-skip. On Lavalink this requires the
+   * SponsorBlock plugin; on NodeLink it uses the built-in /sponsorblock endpoint.
+   * Emits segmentsLoaded/segmentSkipped/chapterStarted/chaptersLoaded events.
    */
   public async setSponsorBlock(categories: string[] = ["sponsor", "selfpromo"]): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    if (this.isOnNodeLink) {
+      await this._node.rest.updateNodeLinkSponsorBlock(this._node.rest.sessionId, this.guildId, {
+        categories,
+      });
+      return;
+    }
     await this._node.rest.setSponsorBlockCategories(this._node.rest.sessionId, this.guildId, categories);
   }
 
   /** Gets the SponsorBlock categories configured for this player on the node */
   public async getSponsorBlock(): Promise<string[]> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    if (this.isOnNodeLink) {
+      const state = await this._node.rest.getNodeLinkSponsorBlock(this._node.rest.sessionId, this.guildId);
+      return state.categories ?? [];
+    }
     return this._node.rest.getSponsorBlockCategories(this._node.rest.sessionId, this.guildId);
   }
 
   /** Clears the SponsorBlock categories for this player on the node */
   public async deleteSponsorBlock(): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    if (this.isOnNodeLink) {
+      await this._node.rest.deleteNodeLinkSponsorBlock(this._node.rest.sessionId, this.guildId);
+      return;
+    }
     await this._node.rest.deleteSponsorBlockCategories(this._node.rest.sessionId, this.guildId);
+  }
+
+  /**
+   * Gets the full NodeLink SponsorBlock state (enabled, categories, actionTypes,
+   * segments, skipMarginMs). NodeLink only.
+   */
+  public async getSponsorBlockState(): Promise<SponsorBlockState | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("SponsorBlock state");
+    return this._node.rest.getNodeLinkSponsorBlock(this._node.rest.sessionId, this.guildId);
+  }
+
+  /**
+   * Sets NodeLink SponsorBlock options: enabled flag, categories, actionTypes,
+   * skipMarginMs (accepted but not applied by current NodeLink builds).
+   */
+  public async setSponsorBlockOptions(options: {
+    enabled?: boolean;
+    categories?: string[];
+    actionTypes?: string[];
+    skipMarginMs?: number;
+  }): Promise<SponsorBlockState | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("SponsorBlock options");
+    return this._node.rest.updateNodeLinkSponsorBlock(this._node.rest.sessionId, this.guildId, options);
+  }
+
+  /** Overrides the full NodeLink SponsorBlock segment list on the node */
+  public async setSponsorBlockSegments(segments: SponsorBlockSegment[]): Promise<SponsorBlockState | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("SponsorBlock segments");
+    return this._node.rest.setNodeLinkSponsorBlockSegments(this._node.rest.sessionId, this.guildId, segments);
   }
 
   /** Fetches lyrics of the currently playing track via the node's LavaLyrics plugin */
@@ -916,6 +1010,10 @@ export class Player<TTrack extends TrackData = TrackData> {
       queue: this.queue.export() as SerializedQueue<TrackData>,
       filters: this.filters.toPayload() as Record<string, unknown>,
       voiceState: this.voiceState,
+      loudnessNormalizer: this._loudnessNormalizer,
+      ducking: this._ducking,
+      fading: this._fading,
+      crossfade: this._crossfade,
     };
   }
 
@@ -1002,6 +1100,10 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (state.filters != null && Object.keys(state.filters).length > 0) {
       this.filters.apply(state.filters as import("../types/protocol.ts").FiltersObject);
     }
+    this._loudnessNormalizer = state.loudnessNormalizer ?? false;
+    this._ducking = state.ducking ?? false;
+    this._fading = state.fading ?? null;
+    this._crossfade = state.crossfade ?? null;
   }
 
   /**
@@ -1229,12 +1331,20 @@ export class Player<TTrack extends TrackData = TrackData> {
         sessionId,
         this.guildId,
         {
-          track: { encoded: track.encoded },
+          track: {
+            encoded: track.encoded,
+            ...(options?.audioTrackId != null ? { audioTrackId: options.audioTrackId } : {}),
+            ...(options?.language != null ? { language: options.language } : {}),
+          },
           position: options?.position,
           endTime: options?.endTime,
           volume,
           paused,
           filters: hasFilterKeys ? filterPayload : undefined,
+          ...(this._loudnessNormalizer ? { loudnessNormalizer: true } : {}),
+          ...(this._ducking ? { ducking: true } : {}),
+          ...(this._fading != null ? { fading: this._fading } : {}),
+          ...(this._crossfade != null ? { crossfade: this._crossfade } : {}),
         },
         options?.noReplace ?? false,
       );
@@ -1244,7 +1354,10 @@ export class Player<TTrack extends TrackData = TrackData> {
       this._positionTimestamp = Date.now();
       this.cancelQueueEmptyDestroy();
     } catch (error) {
-      this._status = previousStatus === "playing" ? "idle" : previousStatus;
+      // Restore the exact prior status — if a previous track was still playing
+      // (previousStatus "playing"), the failure of this play must not mark the
+      // still-audible track as idle
+      this._status = previousStatus;
       throw error;
     }
   }
@@ -1454,6 +1567,66 @@ export class Player<TTrack extends TrackData = TrackData> {
     await this.setFilters();
   }
 
+  /** Replaces the echo filter (NodeLink only) */
+  public async setEcho(settings?: EchoSettings): Promise<void> {
+    this.filters.add(new EchoFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the chorus filter (NodeLink only) */
+  public async setChorus(settings?: ChorusSettings): Promise<void> {
+    this.filters.add(new ChorusFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the compressor filter (NodeLink only) */
+  public async setCompressor(settings?: CompressorSettings): Promise<void> {
+    this.filters.add(new CompressorFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the phaser filter (NodeLink only) */
+  public async setPhaser(settings?: PhaserSettings): Promise<void> {
+    this.filters.add(new PhaserFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the high-pass filter (NodeLink only) */
+  public async setHighPass(settings?: HighPassSettings): Promise<void> {
+    this.filters.add(new HighPassFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the flanger filter (NodeLink only) */
+  public async setFlanger(settings?: FlangerSettings): Promise<void> {
+    this.filters.add(new FlangerFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the reverb filter (NodeLink only) */
+  public async setReverb(settings?: ReverbSettings): Promise<void> {
+    this.filters.add(new ReverbFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the spatial filter (NodeLink only) */
+  public async setSpatial(settings?: SpatialSettings): Promise<void> {
+    this.filters.add(new SpatialFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the phonograph (vinyl) filter (NodeLink only) */
+  public async setPhonograph(settings?: PhonographSettings): Promise<void> {
+    this.filters.add(new PhonographFilter(settings));
+    await this.setFilters();
+  }
+
+  /** Replaces the tesseract filter (NodeLink only) */
+  public async setTesseract(settings?: TesseractSettings): Promise<void> {
+    this.filters.add(new TesseractFilter(settings));
+    await this.setFilters();
+  }
+
   /** Sets autoplay state and optional custom recommendation fetcher */
   public setAutoplay(enabled: boolean = true, fetcher?: (lastTrack: TTrack) => Promise<TTrack | null>): this {
     this.autoplay = enabled;
@@ -1520,17 +1693,55 @@ export class Player<TTrack extends TrackData = TrackData> {
 
   /**
    * Configures fade curves (NodeLink only). Sections: trackStart, trackEnd,
-   * trackStop, seek, ducking — each `{ duration, curve }` with curve one of
-   * linear | exponential | logarithmic | s-curve.
+   * trackStop, seek, pause, resume — each `{ duration, curve?, type? }` with
+   * curve one of linear | exponential | logarithmic | s-curve and type one of
+   * volume | tape | scratch | both. Fade durations are in milliseconds.
    */
-  public async setFading(
-    fading: Record<string, { duration: number; curve?: string }>,
-  ): Promise<void> {
+  public async setFading(fading: FadingSettings): Promise<void> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     this.assertNodeLink("Fading");
+    this._fading = fading;
     const sessionId = this._node.rest.sessionId;
-    if (sessionId == null) return;
-    await this._node.rest.updatePlayer(sessionId, this.guildId, { fading });
+    if (sessionId != null) {
+      await this._node.rest.updatePlayer(sessionId, this.guildId, { fading });
+    }
+    this.scheduleStateSave();
+  }
+
+  /** NodeLink loudness normalization master switch (applied on next play/resync) */
+  public async setLoudnessNormalizer(enabled: boolean = true): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Loudness normalizer");
+    this._loudnessNormalizer = enabled;
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId != null) {
+      await this._node.rest.updatePlayer(sessionId, this.guildId, { loudnessNormalizer: enabled });
+    }
+    this.scheduleStateSave();
+  }
+
+  /** NodeLink ducking master switch (applied on next play/resync) */
+  public async setDucking(enabled: boolean = true): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Ducking");
+    this._ducking = enabled;
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId != null) {
+      await this._node.rest.updatePlayer(sessionId, this.guildId, { ducking: enabled });
+    }
+    this.scheduleStateSave();
+  }
+
+  /** Configures crossfade between tracks (NodeLink only) */
+  public async setCrossfade(crossfade: CrossfadeSettings): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Crossfade");
+    this._crossfade = crossfade;
+    const sessionId = this._node.rest.sessionId;
+    if (sessionId != null) {
+      await this._node.rest.updatePlayer(sessionId, this.guildId, { crossfade });
+    }
+    this.scheduleStateSave();
   }
 
   /** Adds an audio mixer layer (overlay TTS/sound effects — NodeLink only) */
@@ -1559,6 +1770,116 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     this.assertNodeLink("Audio mixer");
     return this._node.rest.removeMixLayer(this._node.rest.sessionId, this.guildId, mixId);
+  }
+
+  // ─── NodeLink encode / streaming / workers / groups accessors ───────────
+
+  /** Encodes a track info object into a base64 Lavalink track string (NodeLink only) */
+  public async encodeTrack(payload: EncodeTrackPayload | { info: EncodeTrackPayload }): Promise<string> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Track encoding");
+    return this._node.rest.encodeTrack(payload);
+  }
+
+  /** Encodes multiple track info objects into base64 track strings (NodeLink only) */
+  public async encodeTracks(
+    tracks: Array<EncodeTrackPayload | { info: EncodeTrackPayload }>,
+  ): Promise<string[]> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Track encoding");
+    return this._node.rest.encodeTracks(tracks);
+  }
+
+  /**
+   * Opens a raw PCM stream for a track (NodeLink only). Returns the raw
+   * Response so the caller can pipe the `audio/l16` body.
+   */
+  public async loadStream(options: LoadStreamOptions): Promise<Response> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Load stream");
+    return this._node.rest.loadStream(options);
+  }
+
+  /** Resolves a direct stream URL for an encoded track (NodeLink only) */
+  public async getTrackStream(encodedTrack: string, itag?: number): Promise<TrackStreamResult> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Track stream");
+    return this._node.rest.getTrackStream(encodedTrack, itag);
+  }
+
+  /** Prometheus-format node metrics (NodeLink only) */
+  public async getNodeMetrics(): Promise<string> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Metrics");
+    return this._node.rest.getMetrics();
+  }
+
+  /** Lists NodeLink worker processes */
+  public async getWorkers(): Promise<WorkerInfo[]> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Workers");
+    return this._node.rest.getWorkers();
+  }
+
+  /** Kills a NodeLink worker process */
+  public async killWorker(
+    body: { clusterId?: string | number; id?: string | number; pid?: string | number; code?: string },
+  ): Promise<Record<string, unknown>> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Workers");
+    return this._node.rest.killWorker(body);
+  }
+
+  /** Gets the NodeLink YouTube configuration (masked credentials) */
+  public async getYouTubeConfig(validate: boolean = false): Promise<YouTubeConfig> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("YouTube config");
+    return this._node.rest.getYouTubeConfig(validate);
+  }
+
+  /** Updates the NodeLink YouTube refresh token / visitor data */
+  public async setYouTubeConfig(body: { refreshToken?: string; visitorData?: string }): Promise<Record<string, unknown>> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("YouTube config");
+    return this._node.rest.setYouTubeConfig(body);
+  }
+
+  /** Lists all multi-guild sync groups for this node's session (NodeLink only) */
+  public async getGroups(): Promise<NodeLinkGroup[]> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Sync groups");
+    return this._node.rest.getGroups(this._node.rest.sessionId);
+  }
+
+  /** Creates a multi-guild sync group (NodeLink only) */
+  public async createGroup(body: { id: string; guildIds?: string[] }): Promise<NodeLinkGroup> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Sync groups");
+    return this._node.rest.createGroup(this._node.rest.sessionId, body);
+  }
+
+  /** Fetches a multi-guild sync group (NodeLink only) */
+  public async getGroup(groupId: string): Promise<NodeLinkGroup> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Sync groups");
+    return this._node.rest.getGroup(this._node.rest.sessionId, groupId);
+  }
+
+  /** Updates a multi-guild sync group, applying the body to every member guild (NodeLink only) */
+  public async updateGroup(
+    groupId: string,
+    body: NodeLinkGroupUpdateBody,
+  ): Promise<NodeLinkGroup & { players: PlayerData[]; errors?: Array<{ guildId: string; error: string }> }> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Sync groups");
+    return this._node.rest.updateGroup(this._node.rest.sessionId, groupId, body);
+  }
+
+  /** Deletes a multi-guild sync group without destroying its players (NodeLink only) */
+  public async deleteGroup(groupId: string): Promise<void> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+    this.assertNodeLink("Sync groups");
+    return this._node.rest.deleteGroup(this._node.rest.sessionId, groupId);
   }
 
   /**
@@ -1689,6 +2010,10 @@ export class Player<TTrack extends TrackData = TrackData> {
         : {}),
       volume: this._volume,
       filters: hasFilterKeys ? filterPayload : undefined,
+      ...(this._loudnessNormalizer ? { loudnessNormalizer: true } : {}),
+      ...(this._ducking ? { ducking: true } : {}),
+      ...(this._fading != null ? { fading: this._fading } : {}),
+      ...(this._crossfade != null ? { crossfade: this._crossfade } : {}),
     });
     this._voiceStateSent = true;
   }
@@ -1706,6 +2031,18 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (this.hasVoiceCredentials) {
       this.settleVoiceReadyWaiters();
     }
+  }
+
+  /**
+   * Invalidates cached voice credentials so the player waits for fresh
+   * Discord VOICE_STATE/SERVER_UPDATE events before pushing playback.
+   * Called after a voice disconnect/rejoin — stale credentials would
+   * otherwise make waitForVoiceReady() resolve instantly and playTrack()
+   * push a track against a dead voice connection.
+   */
+  public resetVoiceState(): void {
+    this._voiceState = { sessionId: null, channelId: null, endpoint: null, token: null };
+    this._voiceStateSent = false;
   }
 
   /** Updates partial internal voice connection state */

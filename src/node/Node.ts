@@ -57,6 +57,7 @@ export class Node {
       secure: config.secure,
       sessionId: config.resumeKey,
       httpHeaders: config.httpHeaders,
+      isNodeLink: config.isNodeLink ?? false,
       retryOptions: {
         maxRetries: config.maxRetries ?? 3,
         baseDelay: config.retryDelay ?? 1000,
@@ -95,9 +96,9 @@ export class Node {
 
   /**
    * Post-ready session setup: detect NodeLink (once), then enable Lavalink
-   * session resuming when configured. NodeLink does not support resuming, so
-   * it is skipped there — reconnects instead re-send player state (the client
-   * already resyncs players whenever a session comes up non-resumed).
+   * session resuming when configured. NodeLink v3+ supports resuming via
+   * PATCH /v4/sessions/:id + the Session-Id header, so it is enabled there
+   * too. Reconnects without a resumed session re-send player state via resync.
    */
   private async onSessionReady(config: NodeConfig): Promise<void> {
     if (this._isNodeLink === null) {
@@ -107,13 +108,14 @@ export class Node {
       } catch {
         this._isNodeLink = false;
       }
+      this.rest.isNodeLink = this._isNodeLink === true;
       if (this._isNodeLink) {
         this.events.emit("debug", `Node ${this.id} detected as NodeLink`);
       }
     }
 
     const wantsResuming = config.resuming === true || config.resumeKey != null;
-    if (!wantsResuming || this._isNodeLink === true || this.ws.sessionId == null) return;
+    if (!wantsResuming || this.ws.sessionId == null) return;
 
     try {
       // Lavalink only honors Session-Id on reconnect if resuming was enabled beforehand
@@ -275,7 +277,11 @@ export class Node {
     }
 
     const playerPenalty = stats.players;
-    const cpuPenalty = Math.round(Math.pow(1.05, stats.cpu.lavalinkLoad * 100) * 10 - 10);
+    // Lavalink reports cpu.lavalinkLoad; NodeLink reports cpu.nodelinkLoad.
+    // Fall back across both so the penalty stays finite for either server.
+    const cpuLoad = stats.cpu.lavalinkLoad ?? stats.cpu.nodelinkLoad ?? 0;
+    const safeCpuLoad = Number.isFinite(cpuLoad) && cpuLoad >= 0 ? cpuLoad : 0;
+    const cpuPenalty = Math.round(Math.pow(1.05, safeCpuLoad * 100) * 10 - 10);
     const deficitPenalty =
       stats.frameStats != null ? Math.round(Math.pow(1.03, stats.frameStats.deficit) * 10 - 10) * 2 : 0;
     const nullPenalty =

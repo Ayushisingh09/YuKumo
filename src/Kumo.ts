@@ -43,7 +43,7 @@ function loadResultToSearchResult(result: LoadResult): SearchResult {
         loadType: "playlist",
         type: LoadTypeMap["playlist"],
         tracks: result.data.tracks,
-        playlistInfo: { name: result.data.info.name, selectedTrack: 0 },
+        playlistInfo: { name: result.data.info.name, selectedTrack: result.data.info.selectedTrack ?? 0 },
       };
     case "search":
       return { loadType: "search", type: LoadTypeMap["search"], tracks: result.data };
@@ -96,6 +96,32 @@ function formatSourcePrefix(source: string): string {
     dz: "dzsearch",
     yandex: "ymsearch",
     ym: "ymsearch",
+    // NodeLink source names
+    tidal: "tdsearch",
+    amazonmusic: "azsearch",
+    yandexmusic: "ymsearch",
+    netease: "ntsearch",
+    jiosaavn: "jssearch",
+    anghami: "agsearch",
+    audius: "ausearch",
+    mixcloud: "mcsearch",
+    letrasmus: "lmsearch",
+    vkmusic: "vksearch",
+    bilibili: "bilisearch",
+    nicovideo: "ncsearch",
+    bluesky: "bksearch",
+    lastfm: "lfsearch",
+    qobuz: "qbsearch",
+    googledrive: "gdsearch",
+    shazam: "shsearch",
+    gaana: "gnsearch",
+    pandora: "pdsearch",
+    iheartradio: "ihsearch",
+    bandcamp: "bcsearch",
+    songlink: "slsearch",
+    youtubeSearch: "ytsearch",
+    soundcloudSearch: "scsearch",
+    spotifySearch: "spsearch",
   };
   if (map[lower]) return map[lower];
   if (lower.endsWith("search")) return lower;
@@ -732,9 +758,11 @@ export class YuKumo {
 
   /** Processes raw Discord VOICE_STATE_UPDATE gateway event */
   public async handleVoiceStateUpdate(data: VoiceStateUpdate): Promise<void> {
-    // Only the bot's own voice state matters — without this filter, any guild
-    // member leaving voice would destroy the player and overwrite the session ID
-    if (data.userId != null && this._userId !== "" && data.userId !== this._userId) {
+    // Only the bot's own voice state matters. Without a configured bot user ID
+    // we cannot tell whose update this is, so any identified non-matching user
+    // (and all updates while the ID is unknown) is ignored — otherwise another
+    // member leaving voice would destroy the player and overwrite the session ID.
+    if (data.userId != null && data.userId !== this._userId) {
       return;
     }
 
@@ -775,7 +803,10 @@ export class YuKumo {
       const current = player.currentTrack;
       try {
         // Re-OP4 to rejoin; fresh credentials arrive via the adapters, and
-        // playTrack awaits voice readiness before pushing the track
+        // playTrack awaits voice readiness before pushing the track. Drop the
+        // cached credentials first so waitForVoiceReady() actually blocks on
+        // the fresh VOICE_SERVER_UPDATE instead of using the stale ones.
+        player.resetVoiceState();
         player.connect();
         this.events.emit("debug", `Auto-reconnecting player for guild ${guildId}`);
         if (current != null) {
@@ -992,6 +1023,14 @@ export class YuKumo {
       "lyricsLine",
       "mixStarted",
       "mixEnded",
+      "volumeChanged",
+      "playerSeek",
+      "playerPause",
+      "filtersChanged",
+      "streamMetadata",
+      "workerFailed",
+      "playerConnected",
+      "playerReconnecting",
     ] as const) {
       ws.on(name as EventName, ((...args: unknown[]) =>
         (this.events.emit as (...a: unknown[]) => void)(name, ...args)) as never);
@@ -1007,7 +1046,7 @@ export class YuKumo {
     const player = this.players.get(guildId);
     if (player == null) return;
 
-    if (code === 4015 || code === 4009) {
+    if (code === 4015 || code === 4009 || code === 4014) {
       this.logger.warn(`Voice socket closed for guild ${guildId} (code ${code}), rejoining channel`);
       // Re-OP4 triggers Discord to issue fresh VOICE_STATE/SERVER_UPDATE events,
       // which flow through the adapters back to sendVoiceUpdate()
