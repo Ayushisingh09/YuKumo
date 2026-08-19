@@ -150,4 +150,26 @@ describe("NodeManager", () => {
   it("should pick null when no nodes", () => {
     expect(manager.pick("guild-1")).toBeNull();
   });
+
+  it("should update userId on the manager and all registered nodes", () => {
+    const node = manager.add({
+      host: "localhost",
+      port: 2333,
+      password: "youshallnotpass",
+      name: "test-node",
+    });
+    const nodeSetUserId = vi.spyOn(node, "setUserId");
+
+    manager.setUserId("999999");
+
+    expect(nodeSetUserId).toHaveBeenCalledWith("999999");
+    // A node added after setUserId must receive the new id
+    const laterNode = manager.add({
+      host: "localhost",
+      port: 2334,
+      password: "youshallnotpass",
+      name: "later-node",
+    });
+    expect(laterNode.createVoiceReceiver("guild-9").guildId).toBe("guild-9");
+  });
 });

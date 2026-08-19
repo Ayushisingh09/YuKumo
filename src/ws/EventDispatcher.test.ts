@@ -123,4 +123,36 @@ describe("EventDispatcher", () => {
     expect(throwing).toHaveBeenCalled();
     expect(normal).toHaveBeenCalled();
   });
+
+  it("should not invoke listeners added during the same emit", () => {
+    const dispatcher = new EventDispatcher();
+    const addedDuringEmit = vi.fn();
+
+    dispatcher.on("nodeReady", () => {
+      dispatcher.on("nodeReady", addedDuringEmit);
+    });
+    dispatcher.emit("nodeReady", "node-1");
+
+    expect(addedDuringEmit).not.toHaveBeenCalled();
+
+    // ...but the listener IS registered for the next emit
+    dispatcher.emit("nodeReady", "node-2");
+    expect(addedDuringEmit).toHaveBeenCalledWith("node-2");
+  });
+
+  it("should still run once-listeners that are removed during the same emit", () => {
+    const dispatcher = new EventDispatcher();
+    const onceCb = vi.fn();
+
+    dispatcher.once("nodeReady", onceCb);
+    dispatcher.on("nodeReady", () => {
+      dispatcher.off("nodeReady");
+    });
+    dispatcher.emit("nodeReady", "node-1");
+
+    expect(onceCb).toHaveBeenCalledTimes(1);
+    // "off" cleared the whole event — the once listener must not fire again
+    dispatcher.emit("nodeReady", "node-2");
+    expect(onceCb).toHaveBeenCalledTimes(1);
+  });
 });
