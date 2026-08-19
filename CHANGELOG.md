@@ -2,6 +2,31 @@
 
 All notable changes to the `yukumo` Lavalink client library will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Full NodeLink Protocol Support**: the client now speaks NodeLink's full protocol, not just the Lavalink subset.
+  - **NodeLink routing**: `getVersion()` hits NodeLink's root `/version`; session resuming is enabled for NodeLink nodes (supported since NodeLink v3) instead of being skipped.
+  - **SponsorBlock**: `player.setSponsorBlock(state)` / `getSponsorBlock()` / `deleteSponsorBlock()` now route to NodeLink's `/sessions/:id/players/:guildId/sponsorblock` endpoint, plus new `getSponsorBlockState()`, `setSponsorBlockOptions()` (PATCH — `enabled`, `categories`, `actionTypes`, `skipMarginMs`) and `setSponsorBlockSegments()` (POST) methods.
+  - **UpdatePlayer extensions**: `loudnessNormalizer`, `ducking`, `crossfade`, expanded `fading` (`{ trackStart | trackEnd | trackStop | seek | pause | resume | ducking }` with `type: "volume" | "tape" | "scratch" | "both"` and `curve: linear | exponential | logarithmic | s-curve`), and `track.audioTrackId` / `track.language`. `setFading()` accepts the new `FadingSettings` shape; new `setLoudnessNormalizer()`, `setDucking()`, `setCrossfade()`.
+  - **New NodeLink filters**: `setEcho()`, `setChorus()`, `setCompressor()`, `setPhaser()`, `setHighPass()`, `setFlanger()`, `setReverb()`, `setSpatial()`, `setPhonograph()`, `setTesseract()` (all built on a shared `NodeLinkFilter` base and applied by `FilterChain`).
+  - **Streaming & audio**: `loadStream(identifier)` (raw PCM `audio/l16`), `getTrackStream(encodedTrack, itag?)` (resolves a direct stream URL), `encodeTrack()` / `encodeTracks()` (server-side encoding for offline-built tracks).
+  - **Metrics, workers & YouTube**: `getNodeMetrics()` (Prometheus text), `getWorkers()` / `killWorker(id)`, `getYouTubeConfig()` / `setYouTubeConfig()`, `getYouTubeOAuth()` / `refreshYouTubeOAuth()`.
+  - **Multi-guild sync groups**: `getGroups()` / `createGroup()` / `getGroup(id)` / `updateGroup(id, body)` / `deleteGroup(id)` on `/v4/sessions/:id/groups`.
+  - **Voice receive rewrite**: `NodeLinkVoiceReceiver` now connects to `/v4/websocket/voice/:guildId` and parses NodeLink's binary frame protocol (op `start`/`stop`/`data`, formats opus/ogg/pcm_s16le, real-time DSP capture via `data` event with `ssrc`/`timestamp`). Legacy JSON `speak` messages still handled. Auto-reconnect with backoff, `connect()` promise, `close()`/`destroy()`.
+  - **NodeLink events**: `volumeChanged`, `playerSeek`, `playerPause`, `filtersChanged`, `streamMetadata`, `workerFailed`, `playerConnected`, `playerReconnecting` forwarded globally (plus debug-forwarded `playerCreated`/`playerDestroyed`/`connectionStatus`/eternal-box events).
+  - **Source prefixes**: NodeLink source prefixes mapped in `search()` — `tidal`/`tdsearch`, `bandcamp`/`bcsearch`, `bilibili`/`bilisearch`, `nicovideo`/`ncsearch`, `netease`/`ntsearch`, `jiosaavn`/`jssearch`, `anghami`/`agsearch`, `audius`/`ausearch`, `mixcloud`/`mcsearch`, `vkmusic`/`vksearch`, `lastfm`/`lfsearch`, `qobuz`/`qbsearch`, `googledrive`/`gdsearch`, `shazam`/`shsearch`, `gaana`/`gnsearch`, `pandora`/`pdsearch`, `iheartradio`/`ihsearch`, `amazonmusic`/`azsearch`, `yandexmusic`/`ymsearch`, and more.
+
+### Fixed
+- **Event dispatcher safety**: `emit()` iterates a snapshot of the listener list — listeners added or removed during an emit are no longer invoked mid-loop (and once-listeners removed during the same emit don't fire twice).
+- **`NodeManager.setUserId()`** now actually updates the manager's user id and propagates it to all nodes (previously a no-op via a `(this as any)` cast).
+- **Player status rollback**: if `playTrack()` fails on top of an already-playing track, the status is restored to `"playing"` (not incorrectly left as `"idle"`).
+- **Node penalties**: CPU load now prefers `cpu.lavalinkLoad` and falls back to NodeLink's `cpu.nodelinkLoad`; missing load metrics can no longer produce `NaN` penalties.
+- **NodeLink resuming**: `/v4/info` detection now also propagates to the `RestClient`, so `getVersion()` and NodeLink-only REST calls route correctly.
+- **Voice handling**: Discord close code `4014` is recognized as an auto-reconnect; stale voice credentials are cleared (`Player.resetVoiceState()`) before the bot rejoins after a disconnect.
+- **Voice-state filter**: `VOICE_STATE_UPDATE` events from non-bot users can no longer destroy a player when the bot's user id is empty.
+- **Search results**: NodeLink playlist responses keep the server's `selectedTrack` index (`playlistInfo.selectedTrack`).
+
 ## [1.8.0] - 2026-08-19
 
 ### Added
