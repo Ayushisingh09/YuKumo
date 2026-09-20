@@ -181,7 +181,8 @@ export class WebSocketClient {
 
     const globalWs = (globalThis as { WebSocket?: unknown }).WebSocket;
     const WSClass = (
-      typeof globalWs !== "undefined" && (globalWs as { _isMockFunction?: boolean })._isMockFunction
+      typeof globalWs !== "undefined" &&
+      (globalWs as { _isMockFunction?: boolean })._isMockFunction === true
         ? globalWs
         : WebSocket
     ) as unknown as SocketConstructor;
@@ -195,7 +196,7 @@ export class WebSocketClient {
         if (!settled) {
           settled = true;
           reject(new Error(`Connection to ${host}:${port} timed out after ${connectTimeout}ms`));
-          if (this.ws === instance) {
+          if (this.ws === (instance as unknown as WebSocket)) {
             // Abort the still-connecting socket so a late open/close can't
             // clobber a successor connection, and drop the stale "connecting"
             // state so a retry can actually connect.
@@ -208,7 +209,7 @@ export class WebSocketClient {
       (timer as { unref?: () => void }).unref?.();
 
       const handleOpen = () => {
-        if (this.ws !== instance) return; // a successor connection owns the client now
+        if (this.ws !== (instance as unknown as WebSocket)) return; // a successor connection owns the client now
         const wasReconnect = this.reconnectAttempts > 0;
         this._state = "connected";
         this.reconnectAttempts = 0;
@@ -270,9 +271,11 @@ export class WebSocketClient {
       // dispatch every message twice and double-run reconnect bookkeeping
       if (typeof instance.on === "function") {
         instance.on("open", handleOpen);
-        instance.on("message", (data: any) => handleMsg(data));
-        instance.on("close", (code: number, reason: any) => handleClose({ code, reason }));
-        instance.on("error", (err: any) => handleError(err));
+        instance.on("message", (data: unknown) => handleMsg(data as string | Buffer));
+        instance.on("close", (code: unknown, reason: unknown) =>
+          handleClose({ code: code as number, reason: reason as string }),
+        );
+        instance.on("error", (err: unknown) => handleError(err));
       } else {
         instance.onopen = handleOpen;
         instance.onmessage = handleMsg;
@@ -477,7 +480,7 @@ export class WebSocketClient {
    * otherwise look "connected" forever and silently swallow every payload.
    * Only active when the socket implementation exposes ping() (the ws package).
    */
-  private startHeartbeat(instance: any): void {
+  private startHeartbeat(instance: SocketLike): void {
     const {
       enableHeartbeat = true,
       heartbeatIntervalMs = 30000,
@@ -500,7 +503,7 @@ export class WebSocketClient {
     this.heartbeatTimer = setInterval(() => {
       if (this._state !== "connected" || this.ws == null) return;
       try {
-        instance.ping();
+        instance.ping?.();
       } catch {
         return;
       }
@@ -518,7 +521,7 @@ export class WebSocketClient {
             terminate.call(instance);
           } else {
             try {
-              instance.close(4000, "Heartbeat timeout");
+              instance.close?.(4000, "Heartbeat timeout");
             } catch {
               // ignore
             }

@@ -1,6 +1,6 @@
 export { DiscordJSAdapter } from "./DiscordJSAdapter.ts";
 export { ErisAdapter } from "./ErisAdapter.ts";
-export { RawGatewayAdapter } from "./RawGatewayAdapter.ts";
+export { RawGatewayAdapter, isVoicePacket } from "./RawGatewayAdapter.ts";
 export { SeyfertAdapter } from "./SeyfertAdapter.ts";
 export { OceanicAdapter } from "./OceanicAdapter.ts";
 export { DiscordenoAdapter } from "./DiscordenoAdapter.ts";
