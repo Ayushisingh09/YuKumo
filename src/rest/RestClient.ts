@@ -133,6 +133,14 @@ export class RestClient {
     return this._isNodeLink;
   }
 
+  /**
+   * Base URL for server plugins that register their routes at the server root
+   * rather than under `/v4` (e.g. youtube-source's `/youtube`).
+   */
+  private get pluginBaseUrl(): string {
+    return this.rootUrl;
+  }
+
   public set isNodeLink(value: boolean) {
     this._isNodeLink = value;
   }
@@ -726,6 +734,46 @@ export class RestClient {
   /** NodeLink connection metrics (speed, downloaded bytes, duration) via /v4/connection */
   public async getConnectionMetrics(): Promise<unknown> {
     return this.request<unknown>("GET", "/connection");
+  }
+
+  /**
+   * Reads the youtube-source plugin status (`GET /youtube`): whether OAuth is
+   * enabled, the refresh token, and whether a poToken/visitorData pair is set.
+   * Requires the youtube-source plugin on the node.
+   */
+  public async getYouTubeStatus(): Promise<unknown> {
+    return this.request<unknown>("GET", "/youtube", undefined, undefined, this.pluginBaseUrl);
+  }
+
+  /**
+   * Configures the youtube-source plugin's poToken / visitorData at runtime
+   * (`POST /youtube`) to bypass bot-detection on YouTube playback. Get the
+   * values from the youtube-trusted-session-generator.
+   * Requires the youtube-source plugin on the node.
+   */
+  public async setYouTubePoToken(poToken: string, visitorData: string): Promise<void> {
+    await this.request<void>("POST", "/youtube", { poToken, visitorData }, undefined, this.pluginBaseUrl);
+  }
+
+  /**
+   * Supplies the youtube-source plugin an OAuth refresh token at runtime
+   * (`POST /youtube` with `{ refreshToken, skipInitialization }`), letting the
+   * node authenticate as a real account. Omit `refreshToken` to begin the
+   * device-code flow (the plugin logs the URL/code). Persist the returned token
+   * from the node logs and pass it back on the next boot to avoid re-auth.
+   * Requires the youtube-source plugin on the node.
+   */
+  public async setYouTubeRefreshToken(
+    refreshToken?: string,
+    skipInitialization = true,
+  ): Promise<void> {
+    await this.request<void>(
+      "POST",
+      "/youtube",
+      { refreshToken: refreshToken ?? null, skipInitialization },
+      undefined,
+      this.pluginBaseUrl,
+    );
   }
 
   /** Adds an audio mixer layer to a guild's player (NodeLink only) */

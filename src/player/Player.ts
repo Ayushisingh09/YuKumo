@@ -753,6 +753,28 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this.currentTrack;
   }
 
+  /**
+   * Jumps straight to the track at `index` in the queue and starts playing it,
+   * replacing whatever is currently on the node. Unlike calling
+   * `queue.skipTo()` directly, this drives the node so the cursor never points
+   * at a not-yet-played track while old audio keeps running (which would
+   * silently skip a track on the next natural end). Skipped-over tracks go to
+   * history. Returns the now-playing track, or null if the index is invalid.
+   *
+   * @param index 0-based index into the current queue
+   */
+  public async skipTo(index: number): Promise<TTrack | null> {
+    if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
+
+    const target = this.queue.skipTo(index);
+    if (target == null) return null;
+
+    // The queue cursor now points at `target`; make the node play it so audio
+    // matches the queue. playTrack replaces the current track on the node.
+    await this.playTrack(target);
+    return this.currentTrack;
+  }
+
   /** Reassigns player to a new Lavalink node (for node failover / load balancing) */
   public async setNode(node: Node): Promise<void> {
     const oldNode = this._node;
@@ -1642,6 +1664,24 @@ export class Player<TTrack extends TrackData = TrackData> {
   /** Replaces the tesseract filter (NodeLink only) */
   public async setTesseract(settings?: TesseractSettings): Promise<void> {
     this.filters.add(new TesseractFilter(settings));
+    await this.setFilters();
+  }
+
+  /**
+   * Sets a raw server-side plugin filter and syncs it to the node. Works with
+   * any filter plugin installed on the Lavalink server (LavaDSPX's `highPass`,
+   * `lowPass`, `normalization`, `echo`, etc.); `settings` passes through under
+   * Lavalink v4's `pluginFilters`. Pass `false`/`null` to remove it.
+   *
+   * @example
+   * await player.setPluginFilter("normalization", { maxAmplitude: 0.75, adaptive: true });
+   * await player.setPluginFilter("echo", { echoLength: 0.5, decay: 0.3 });
+   */
+  public async setPluginFilter(
+    name: string,
+    settings: Record<string, unknown> | false | null,
+  ): Promise<void> {
+    this.filters.setPluginFilter(name, settings);
     await this.setFilters();
   }
 
