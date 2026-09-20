@@ -181,6 +181,12 @@ export class YuKumo {
   private readonly queueOptions: NonNullable<ManagerOptions["queueOptions"]>;
   /** Session + player resuming across restarts (see ManagerOptions.resuming) */
   private readonly resuming: { enabled: boolean; timeout: number; persistPlayers: boolean };
+  /**
+   * Deferred player migrations for nodes whose session-resume window is still
+   * open after a disconnect (nodeId -> timer). Cleared when the node reconnects
+   * or when the window elapses.
+   */
+  private readonly pendingFailovers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(options: ManagerOptions) {
     this._userId = options.userId ?? "";
@@ -449,6 +455,10 @@ export class YuKumo {
     }
     this.searchCache.clear();
     this.pendingPlayerCreates.clear();
+    for (const timer of this.pendingFailovers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingFailovers.clear();
     if (typeof this.storage.disconnect === "function") {
       try {
         await this.storage.disconnect();
@@ -970,6 +980,7 @@ export class YuKumo {
   private bindNodeEvents(node: Node): void {
     const ws = node.ws.eventDispatcher;
     ws.on("nodeReady", (nodeId: string) => {
+      this.cancelPendingFailover(nodeId);
       this.events.emit("nodeReady", nodeId);
       // Persist the session ID so a restarted process can reclaim the session
       if (this.resuming.enabled && node.ws.sessionId != null) {
@@ -1066,6 +1077,43 @@ export class YuKumo {
   }
 
   private handleNodeFailover(failedNodeId: string): void {
+    const failedNode = this.nodes.get(failedNodeId);
+    const resumeWindowMs =
+      failedNode?.config.resuming === true
+        ? (failedNode.config.resumeTimeout ?? this.resuming.timeout) * 1000
+        : 0;
+
+    if (resumeWindowMs > 0) {
+      // Session resuming is enabled for this node. Give it its resume window
+      // to reconnect: migrating now would defeat gap-free audio (the resumed
+      // session keeps playing) and orphan a session that hasn't expired yet.
+      // If the node never comes back, fail over once the window elapses.
+      if (this.pendingFailovers.has(failedNodeId)) return; // already deferred
+      this.events.emit(
+        "debug",
+        `Deferring failover for node ${failedNodeId} for ${resumeWindowMs}ms (session resuming enabled)`,
+      );
+      const timer = setTimeout(() => {
+        this.pendingFailovers.delete(failedNodeId);
+        this.migratePlayersFrom(failedNodeId);
+      }, resumeWindowMs);
+      (timer as { unref?: () => void }).unref?.();
+      this.pendingFailovers.set(failedNodeId, timer);
+      return;
+    }
+
+    this.migratePlayersFrom(failedNodeId);
+  }
+
+  private cancelPendingFailover(nodeId: string): void {
+    const timer = this.pendingFailovers.get(nodeId);
+    if (timer != null) {
+      clearTimeout(timer);
+      this.pendingFailovers.delete(nodeId);
+    }
+  }
+
+  private migratePlayersFrom(failedNodeId: string): void {
     const affectedPlayers = this.players.getAll().filter((p) => p.node.id === failedNodeId);
     for (const player of affectedPlayers) {
       const replacementNode = this.nodes.pick(player.guildId);
