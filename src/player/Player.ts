@@ -243,7 +243,10 @@ export class Player<TTrack extends TrackData = TrackData> {
   private readonly boundOnTrackStart = (guildId: string, track: TrackData) => {
     if (guildId !== this.guildId) return;
     this._status = "playing";
-    this._paused = false;
+    // Do NOT reset _paused here: a track started with `{ paused: true }` is
+    // reported by Lavalink as a TrackStartEvent too, and PlayerUpdateEvent has
+    // no `paused` field to recover the truth from. _paused was already set by
+    // playTrack before the PATCH was sent.
     this._lastTrackStartTs = Date.now();
     this.cancelQueueEmptyDestroy();
     this.scheduleStateSave();

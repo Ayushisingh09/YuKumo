@@ -650,6 +650,21 @@ describe("Player track-end handling and lifecycle", () => {
     expect(player.volume).toBe(80);
   });
 
+  it("keeps a paused-start paused when the node reports TrackStartEvent", async () => {
+    const player = createLivePlayer();
+    await player.play(makeTrack("a"), { paused: true });
+
+    // Lavalink sends TrackStartEvent even for tracks started with paused: true
+    node.ws.eventDispatcher.emit("trackStart", "guild-1", makeTrack("a"));
+
+    expect(player.paused).toBe(true);
+    // resume() must actually hit the node instead of no-op'ing
+    await player.resume();
+    const resumeCall = node.rest.updatePlayer.mock.calls.at(-1);
+    expect(resumeCall?.[2].paused).toBe(false);
+    expect(player.paused).toBe(false);
+  });
+
   it("destroys the player with the right reason when maxErrorsPerTime is exceeded", async () => {
     const player = createLivePlayer();
     player.maxErrorsPerTime = { threshold: 35000, maxAmount: 2 };
