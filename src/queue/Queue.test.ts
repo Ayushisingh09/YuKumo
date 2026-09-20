@@ -107,6 +107,24 @@ describe("Queue", () => {
       expect(queue.next()).toBe("track-2");
     });
 
+    it("previous() in queue-repeat steps back without duplicating tracks", () => {
+      const queue = new Queue<string>();
+      queue.enqueue("track-1");
+      queue.enqueue("track-2");
+      queue.enqueue("track-3");
+      queue.start();
+      queue.setRepeatMode("queue");
+      queue.next(); // -> track-2
+      queue.next(); // -> track-3
+      queue.next(); // wraps -> track-1
+
+      expect(queue.previous()).toBe("track-3");
+      expect(queue.previous()).toBe("track-2");
+      // the array is untouched — no duplicated copies were re-inserted
+      expect(queue.tracksList).toEqual(["track-1", "track-2", "track-3"]);
+      expect(queue.size).toBe(3);
+    });
+
     it("should not repeat when mode is none", () => {
       const queue = new Queue<string>();
       queue.enqueue("track-1");

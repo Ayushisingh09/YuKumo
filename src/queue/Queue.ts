@@ -229,6 +229,21 @@ export class Queue<T> {
     // "previous" until that track ends (it isn't in the array to step back to).
     if (this._detachedCurrent != null) return null;
 
+    // In "queue" repeat mode tracks are never consumed, so history only holds
+    // copies of live entries — re-inserting one would duplicate a track that is
+    // already in the array and grow the queue with every call. Step the cursor
+    // back through the cycle instead.
+    if (this._repeatMode === "queue") {
+      if (this.tracks.length === 0) return null;
+      if (this.currentIndex < 0) {
+        this.currentIndex = this.tracks.length - 1;
+      } else {
+        this.currentIndex = (this.currentIndex - 1 + this.tracks.length) % this.tracks.length;
+      }
+      this.notifyChange();
+      return this.tracks[this.currentIndex] as T;
+    }
+
     const historyTrack = this.history.pop() ?? null;
     if (historyTrack != null) {
       const insertAt = this.currentIndex >= 0 ? this.currentIndex : 0;
