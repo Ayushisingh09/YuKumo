@@ -1065,7 +1065,8 @@ export class YuKumo {
     }
   }
 
-  private resyncPlayersOnNode(nodeId: string): void {    const affected = this.players.getAll().filter((p) => p.node.id === nodeId);
+  private resyncPlayersOnNode(nodeId: string): void {
+    const affected = this.players.getAll().filter((p) => p.node.id === nodeId);
     for (const player of affected) {
       player.resync().catch((err: unknown) => {
         this.events.emit(
