@@ -412,5 +412,64 @@ describe("WebSocketClient", () => {
 
       expect(mockConstructor.mock.calls.length).toBe(callCount);
     });
+
+    it("ignores a stale socket's close after the reconnect succeeded", async () => {
+      const client = createClient();
+      const disconnected = vi.fn();
+      client.on("nodeDisconnected", disconnected);
+
+      const connectPromise = client.connect();
+      mockWs.onopen?.(new Event("open"));
+      await connectPromise;
+
+      const firstWs = mockWs;
+      const secondMock = createMockWebSocket();
+      globalThis.WebSocket = vi.fn(() => secondMock) as unknown as typeof WebSocket;
+
+      // network blip: first socket closes → reconnect fires
+      firstWs.onclose?.({ code: 1006, reason: "network" });
+      await new Promise((r) => setTimeout(r, 100));
+      secondMock.onopen?.(new Event("open")); // B is the live connection now
+      expect(client.state).toBe("connected");
+      expect(disconnected).toHaveBeenCalledTimes(1);
+
+      // A late close from the OLD socket must not clobber the live connection
+      const mockConstructor = globalThis.WebSocket as unknown as { mock: { calls: unknown[] } };
+      const callCount = mockConstructor.mock.calls.length;
+      firstWs.onclose?.({ code: 1002, reason: "stale" });
+      await new Promise((r) => setTimeout(r, 150)); // enough for a phantom reconnect
+
+      expect(client.state).toBe("connected");
+      expect(disconnected).toHaveBeenCalledTimes(1);
+      expect(mockConstructor.mock.calls.length).toBe(callCount); // no phantom reconnect
+    });
+
+    it("aborts a timed-out connect and allows a retry", async () => {
+      vi.useFakeTimers();
+      try {
+        const client = createClient();
+        const connectPromise = client.connect();
+        expect(client.state).toBe("connecting");
+
+        // Register the rejection handler before the timer fires so the
+        // rejection is never "unhandled" mid-advance
+        const timedOut = expect(connectPromise).rejects.toThrow("timed out");
+        await vi.advanceTimersByTimeAsync(16_000); // > 15s connectTimeout
+        await timedOut;
+
+        expect(mockWs.close).toHaveBeenCalled(); // pending socket aborted
+        expect(client.state).toBe("disconnected"); // not stuck "connecting"
+
+        const mockConstructor = globalThis.WebSocket as unknown as { mock: { calls: unknown[] } };
+        const callsBefore = mockConstructor.mock.calls.length;
+        const retry = client.connect();
+        expect(mockConstructor.mock.calls.length).toBe(callsBefore + 1);
+        mockWs.onopen?.(new Event("open"));
+        await retry;
+        expect(client.state).toBe("connected");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

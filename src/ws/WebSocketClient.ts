@@ -146,12 +146,20 @@ export class WebSocketClient {
         if (!settled) {
           settled = true;
           reject(new Error(`Connection to ${host}:${port} timed out after ${connectTimeout}ms`));
+          if (this.ws === instance) {
+            // Abort the still-connecting socket so a late open/close can't
+            // clobber a successor connection, and drop the stale "connecting"
+            // state so a retry can actually connect.
+            this.teardownSocket("Connection timed out");
+            this._state = "disconnected";
+          }
         }
       }, connectTimeout);
       // Don't keep the process alive just for the connect timeout
       (timer as { unref?: () => void }).unref?.();
 
       const handleOpen = () => {
+        if (this.ws !== instance) return; // a successor connection owns the client now
         const wasReconnect = this.reconnectAttempts > 0;
         this._state = "connected";
         this.reconnectAttempts = 0;
@@ -169,6 +177,7 @@ export class WebSocketClient {
       };
 
       const handleMsg = (event: any) => {
+        if (this.ws !== instance) return;
         const data =
           typeof event === "string" || Buffer.isBuffer(event)
             ? event.toString()
@@ -179,6 +188,7 @@ export class WebSocketClient {
       };
 
       const handleClose = (event: any) => {
+        if (this.ws !== instance) return; // stale socket — ignore, a successor exists
         const code = typeof event === "number" ? event : (event?.code ?? 1000);
         const reason = event?.reason != null ? String(event.reason) : "";
         this._state = "disconnected";
@@ -198,6 +208,7 @@ export class WebSocketClient {
       };
 
       const handleError = (err: any) => {
+        if (this.ws !== instance) return; // stale socket — ignore
         const error =
           err instanceof Error ? err : new Error(String(err?.message ?? err ?? "WebSocket error"));
         this.events.emit("debug", `WebSocket error on ${host}:${port}: ${error.message}`);
