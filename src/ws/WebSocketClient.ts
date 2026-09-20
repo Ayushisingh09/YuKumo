@@ -6,6 +6,44 @@ import { EventDispatcher } from "./EventDispatcher.ts";
 
 export type WebSocketState = "disconnected" | "connecting" | "connected" | "destroyed";
 
+/**
+ * The minimal surface Yukumo needs from a WebSocket implementation. Both the
+ * `ws` package (Node) and the browser/global `WebSocket` satisfy this — the
+ * `on`-style methods come from `ws`, the `on*` handler properties from the DOM
+ * API, and we feature-detect which pair to wire in {@link WebSocketClient.connect}.
+ */
+interface SocketLike {
+  on?: (event: string, listener: (...args: unknown[]) => void) => void;
+  ping?: () => void;
+  close?: (code?: number, reason?: string) => void;
+  terminate?: () => void;
+  removeAllListeners?: () => void;
+  send?: (data: string) => void;
+  onopen?: ((...args: unknown[]) => void) | null;
+  onmessage?: ((...args: unknown[]) => void) | null;
+  onclose?: ((...args: unknown[]) => void) | null;
+  onerror?: ((...args: unknown[]) => void) | null;
+}
+
+/** Constructs a {@link SocketLike}; matches both `ws` and the global `WebSocket`. */
+type SocketConstructor = new (url: string, options?: { headers?: Record<string, string> }) => SocketLike;
+
+/** A close event as delivered by the DOM API (the `ws` package passes code/reason positionally). */
+interface CloseEventLike {
+  code?: number;
+  reason?: string;
+}
+
+/** A message event as delivered by the DOM API (the `ws` package passes the data directly). */
+interface MessageEventLike {
+  data?: unknown;
+}
+
+/** An error event/argument as delivered by either implementation. */
+interface ErrorEventLike {
+  message?: string;
+}
+
 export interface WebSocketClientOptions {
   nodeConfig: NodeConfig;
   userId: string;
@@ -132,13 +170,15 @@ export class WebSocketClient {
       headers["Session-Id"] = this._sessionId;
     }
 
-    const WSClass =
-      typeof globalThis.WebSocket !== "undefined" && (globalThis.WebSocket as any)._isMockFunction
-        ? globalThis.WebSocket
-        : WebSocket;
+    const globalWs = (globalThis as { WebSocket?: unknown }).WebSocket;
+    const WSClass = (
+      typeof globalWs !== "undefined" && (globalWs as { _isMockFunction?: boolean })._isMockFunction
+        ? globalWs
+        : WebSocket
+    ) as unknown as SocketConstructor;
 
-    const instance = new (WSClass as any)(url, { headers });
-    this.ws = instance;
+    const instance = new WSClass(url, { headers });
+    this.ws = instance as unknown as WebSocket;
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -176,21 +216,21 @@ export class WebSocketClient {
         }
       };
 
-      const handleMsg = (event: any) => {
-        if (this.ws !== instance) return;
+      const handleMsg = (event: string | Buffer | MessageEventLike) => {
+        if (this.ws !== (instance as unknown as WebSocket)) return;
         const data =
           typeof event === "string" || Buffer.isBuffer(event)
             ? event.toString()
-            : event?.data != null
+            : event.data != null
               ? String(event.data)
               : String(event);
         this.handleMessage(data);
       };
 
-      const handleClose = (event: any) => {
-        if (this.ws !== instance) return; // stale socket — ignore, a successor exists
-        const code = typeof event === "number" ? event : (event?.code ?? 1000);
-        const reason = event?.reason != null ? String(event.reason) : "";
+      const handleClose = (event: number | CloseEventLike) => {
+        if (this.ws !== (instance as unknown as WebSocket)) return; // stale socket — ignore, a successor exists
+        const code = typeof event === "number" ? event : (event.code ?? 1000);
+        const reason = typeof event !== "number" && event.reason != null ? String(event.reason) : "";
         this._state = "disconnected";
         this.stopHeartbeat();
         this.events.emit("debug", `WebSocket closed: code=${code} reason=${reason}`);
