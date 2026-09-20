@@ -524,6 +524,8 @@ export class WebSocketClient {
         // reconnection failure is handled by onclose
       });
     }, delay);
+    // A dead node must not keep the process alive across every backoff window
+    (this.reconnectTimer as { unref?: () => void }).unref?.();
   }
 
   public send(payload: Record<string, unknown>): void {
