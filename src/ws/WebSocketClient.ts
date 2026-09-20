@@ -575,7 +575,10 @@ export class WebSocketClient {
 
     this.teardownSocket("Client shutdown");
     this._state = "disconnected";
-    this.events.removeAllListeners();
+    // NOTE: do NOT strip this.events listeners here. close() is a restartable
+    // shutdown (connect() is still allowed afterwards) and the dispatcher holds
+    // the manager's nodeReady/nodeDisconnected/... wiring — wiping it would turn
+    // a reconnected node into a zombie that the manager can never see again.
   }
 
   public destroy(): void {

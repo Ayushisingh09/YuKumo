@@ -357,6 +357,34 @@ describe("WebSocketClient", () => {
       expect(mockWs.close).toHaveBeenCalled();
       expect(client.state).toBe("disconnected");
     });
+
+    it("keeps dispatcher listeners after close() so a reconnect stays live", async () => {
+      const client = createClient();
+      const ready = vi.fn();
+      client.on("nodeReady", ready);
+
+      const connectPromise = client.connect();
+      mockWs.onopen?.(new Event("open"));
+      await connectPromise;
+      mockWs.onmessage?.({
+        data: JSON.stringify({ op: "ready", resumed: false, sessionId: "s1" }),
+      } as MessageEvent);
+      expect(ready).toHaveBeenCalledTimes(1);
+
+      await client.close();
+
+      // reconnect after close() — the manager's nodeReady wiring must survive
+      const againMock = createMockWebSocket();
+      globalThis.WebSocket = vi.fn(() => againMock) as unknown as typeof WebSocket;
+      const reconnectPromise = client.connect();
+      againMock.onopen?.(new Event("open"));
+      await reconnectPromise;
+      againMock.onmessage?.({
+        data: JSON.stringify({ op: "ready", resumed: true, sessionId: "s2" }),
+      } as MessageEvent);
+
+      expect(ready).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("destroy", () => {
