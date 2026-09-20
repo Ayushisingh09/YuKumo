@@ -1330,7 +1330,7 @@ export class Player<TTrack extends TrackData = TrackData> {
       const volume = options?.volume != null ? Math.max(0, Math.min(1000, options.volume)) : this._volume;
       const paused = options?.paused ?? this._paused;
 
-      await this._node.rest.updatePlayer(
+      const playerState = await this._node.rest.updatePlayer(
         sessionId,
         this.guildId,
         {
@@ -1353,8 +1353,17 @@ export class Player<TTrack extends TrackData = TrackData> {
       );
       this._volume = volume;
       this._paused = paused;
-      this._position = options?.position ?? 0;
-      this._positionTimestamp = Date.now();
+
+      // A noReplace=true request that found a track already playing does NOT
+      // start the requested track — the response reports the still-playing
+      // track. Zeroing the position baseline in that case would corrupt
+      // interpolation and persisted positions while the old track keeps
+      // playing, so only reset when this request actually adopted the track.
+      const playingEncoded = playerState?.track?.encoded ?? null;
+      if (playingEncoded == null || playingEncoded === track.encoded) {
+        this._position = options?.position ?? 0;
+        this._positionTimestamp = Date.now();
+      }
       this.cancelQueueEmptyDestroy();
     } catch (error) {
       // Restore the exact prior status — if a previous track was still playing

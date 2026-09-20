@@ -529,6 +529,33 @@ describe("Player track-end handling and lifecycle", () => {
     expect(player.currentTrack?.encoded).toBe("encoded-b");
   });
 
+  it("playTrack position baseline: reset on replace, kept when noReplace is ignored", async () => {
+    vi.useFakeTimers();
+    const player = createLivePlayer();
+    player.queue.enqueue(makeTrack("a"));
+    // Lavalink echoes the playing track; a noReplace track change while a track
+    // is playing is silently ignored and reports the OLD still-playing track.
+    node.rest.updatePlayer = vi.fn().mockImplementation(
+      (_s: unknown, _g: unknown, o: { track?: { encoded?: string | null } }, noReplace?: boolean) => {
+        const req = o.track?.encoded ?? null;
+        if (req === "encoded-b" && noReplace === true) return { track: makeTrack("a") };
+        return { track: req != null ? makeTrack(req.slice("encoded-".length)) : makeTrack("echo") };
+      },
+    );
+
+    await player.play(); // starts "a"
+    await player.seek(25000); // position baseline 25000
+    expect(player.position).toBe(25000);
+
+    // ignored noReplace request — the old track keeps playing, baseline must survive
+    await player.playTrack(makeTrack("b"), { noReplace: true });
+    expect(player.position).toBe(25000);
+
+    // a real replacement restarts the playhead
+    await player.playTrack(makeTrack("c"));
+    expect(player.position).toBe(0);
+  });
+
   it("skip() with nothing playing emits queueEnd and does not throw when autoplay is on", async () => {
     const player = createLivePlayer();
     player.setAutoplay(true);
