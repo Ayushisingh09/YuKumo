@@ -21,6 +21,8 @@ import type {
   VoiceGatewayPayload,
   EventName,
   EventCallback,
+  EventMap,
+  NodeStats,
 } from "./types/internal.ts";
 import type { TrackData, LoadResult, LavaSearchType, LavaSearchResult } from "./types/protocol.ts";
 import { LoadTypeMap, DestroyReasons } from "./types/constants.ts";
@@ -409,7 +411,7 @@ export class YuKumo {
   private bindPlayerEvents(player: Player): void {
     player.events.on("queueEnd", (guildId: string) => {
       this.events.emit("queueEnd", guildId);
-      this.events.emit("playerEmpty" as EventName, guildId);
+      this.events.emit("playerEmpty", guildId);
     });
   }
 
@@ -811,7 +813,7 @@ export class YuKumo {
    * configured onDisconnect policy (autoReconnect wins over destroyPlayer).
    */
   private async handleVoiceDisconnect(guildId: string, player: Player): Promise<void> {
-    this.events.emit("playerDisconnect" as EventName, guildId, "voiceChannelLeft");
+    this.events.emit("playerDisconnect", guildId, "voiceChannelLeft");
     if (this.onDisconnect.autoReconnect && this.sendGatewayPayload != null) {
       const position = player.position;
       const paused = player.paused;
@@ -1005,7 +1007,9 @@ export class YuKumo {
     });
     ws.on("nodeReconnected", (nodeId: string) => this.events.emit("nodeReconnected", nodeId));
     ws.on("nodeError", (nodeId: string, error: Error) => this.events.emit("nodeError", nodeId, error));
-    ws.on("stats", (nodeId: string, stats: unknown) => this.events.emit("stats", nodeId, stats as never));
+    ws.on("stats", (nodeId: string, stats: unknown) =>
+      this.events.emit("stats", nodeId, stats as NodeStats),
+    );
     ws.on("debug", (msg: string) => this.events.emit("debug", msg));
     ws.on("socketClosed", (guildId: string, code: number, reason: string, byRemote: boolean) => {
       this.events.emit("socketClosed", guildId, code, reason, byRemote);
@@ -1047,9 +1051,12 @@ export class YuKumo {
       "workerFailed",
       "playerConnected",
       "playerReconnecting",
-    ] as const) {
-      ws.on(name as EventName, ((...args: unknown[]) =>
-        (this.events.emit as (...a: unknown[]) => void)(name, ...args)) as never);
+    ] satisfies readonly EventName[]) {
+      // Every forwarded event shares the same "pass args straight through"
+      // shape; re-emitting on our own dispatcher keeps the public EventMap types.
+      ws.on(name, (...args: unknown[]) => {
+        this.events.emit(name, ...(args as Parameters<EventMap[typeof name]>));
+      });
     }
   }
 
