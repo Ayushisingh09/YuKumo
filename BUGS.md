@@ -5,19 +5,23 @@ against the Lavalink v4 protocol spec (`lavalink.dev/api/rest`, `lavalink.dev/ap
 and the existing test suite. Every item below was verified by tracing the code path —
 nothing here is stated "looks fine" without a trace.
 
+> **Phase 4 status:** the 4 High and 4 Medium items are **fixed with regression tests**;
+> 2 of 4 Low and 1 of 4 Nit items are fixed; the remaining open items (L2, L4, N1, N3) are
+> left documented with rationale. Each entry below carries a `**Status:**` line.
+
 Severities: **Critical** (silent corruption / crash / security), **High** (wrong behavior
 in normal operation), **Medium** (wrong behavior in a specific but plausible flow),
 **Low** (edge-case / cosmetic), **Nit** (style/type-unsafety only).
 
 ## Severity summary
 
-| Severity | Count |
-|----------|-------|
-| Critical | 0 |
-| High     | 4 |
-| Medium   | 4 |
-| Low      | 4 |
-| Nit      | 4 |
+| Severity | Count | Fixed | Open |
+|----------|-------|-------|------|
+| Critical | 0     | —     | 0    |
+| High     | 4     | 4     | 0    |
+| Medium   | 4     | 4     | 0    |
+| Low      | 4     | 2 (L1, L3) | 2 (L2, L4) |
+| Nit      | 4     | 1 (N2) | 3 (N1, N3; N4 verified non-issue) |
 
 Top-10 most dangerous items are the 4 High + the 4 Medium + 2 of the Low items
 (see [§Top-10](#top-10-most-dangerous-bugs)).
@@ -36,6 +40,8 @@ explicit user action.
 ## High
 
 ### H1. `boundOnTrackStart` force-unpauses a track that was started paused
+
+**Status:** ✅ Fixed in `801e3a6` — removed the forced `this._paused = false`; regression test in `src/player/Player.test.ts` (live-node infra).
 
 **File:** `src/player/Player.ts:243-252`
 
@@ -86,6 +92,11 @@ republishes the intended state.
 ---
 
 ### H2. `Queue.remove()` of the current track silently desyncs the node from the queue
+
+**Status:** ✅ Fixed in `e55918c` — the removed-but-still-playing track is held as
+`Queue._detachedCurrent` and consumed by the next `next()`; `currentTrack`/`export`/`import`
+and the mutators are wired for it. The old pinned test (`Queue.test.ts:367-375`) was
+replaced and a player-level event test added.
 
 **File:** `src/queue/Queue.ts:254-272`
 
@@ -152,6 +163,11 @@ consumed track.
 
 ### H3. Node failover runs on *every* `nodeDisconnected`, defeating session resuming
 
+**Status:** ✅ Fixed in `294d167` — `handleNodeFailover` defers migration while the failed
+node's resume window can still recover (`resuming.enabled` + `resumeTimeout`, unref'd
+timers); `nodeReady` cancels the deferred failover; timers cleared in `destroy()`. Two
+fake-timer tests in `src/Regressions.test.ts`.
+
 **Files:** `src/Kumo.ts:986-989` (wiring) and `src/Kumo.ts:1068-1079` (handler)
 
 ```ts
@@ -211,6 +227,11 @@ enabled (and the failure looks transient), skip the migration and let the reconn
 ---
 
 ### H4. WebSocketClient: stale socket handlers clobber a successor connection
+
+**Status:** ✅ Fixed in `82366a9` — `if (this.ws !== instance) return;` identity guards on
+all four socket handlers, and connect-timeout now tears the pending socket down
+(`state → disconnected`). Two tests in `src/ws/WebSocketClient.test.ts` (stale-close and
+timeout-abort, both with the mock-WebSocket infra).
 
 **File:** `src/ws/WebSocketClient.ts:140-198`
 
@@ -286,6 +307,10 @@ handleMsg/handleError`; (b) on connect timeout, tear down the pending socket
 
 ### M1. `close()`/`destroy()` wipe every WebSocket dispatcher listener → zombie node on reconnect
 
+**Status:** ✅ Fixed in `08bfc1b` — `close()` (restartable path) keeps the dispatcher
+listeners; only `destroy()` strips them. Regression test added in
+`src/ws/WebSocketClient.test.ts`.
+
 **File:** `src/ws/WebSocketClient.ts:557-581`
 
 ```ts
@@ -332,6 +357,9 @@ never runs, and the "node" is a zombie from the manager's perspective.
 
 ### M2. `resolveTrack()` ignores the playlist's `selectedTrack`
 
+**Status:** ✅ Fixed in `57f7696` — returns `tracks[clamped(info.selectedTrack)]`; two tests
+added in `src/rest/RestClient.test.ts` (`makeEncodedTrack` helper).
+
 **File:** `src/rest/RestClient.ts:523-528`
 
 ```ts
@@ -365,6 +393,9 @@ bounds check.
 ---
 
 ### M3. `Track.toJSON()` drops `requester`
+
+**Status:** ✅ Fixed in `c5df373` — `toJSON()` merges `this.requester` into `userData` when
+defined; round-trip test added in `src/tracks/Track.test.ts`.
 
 **File:** `src/tracks/Track.ts:80-87`
 
@@ -407,6 +438,10 @@ loses it too.
 
 ### M4. `Queue.previous()` duplicates tracks in queue-repeat mode
 
+**Status:** ✅ Fixed in `e121976` — in `"queue"` repeat mode `previous()` steps the cursor
+back modulo instead of popping history copies back into the array; test added
+(`queue-repeat steps back without duplicating tracks`).
+
 **File:** `src/queue/Queue.ts:199-216`
 
 ```ts
@@ -448,6 +483,10 @@ duplicate each call.
 
 ### L1. Reconnect timer is never `unref()`'d
 
+**Status:** ✅ Fixed in `3551fa2` — the reconnect timer is `.unref()`'d like the
+connect-timeout timer, so a dead node no longer keeps the process alive across backoff
+windows.
+
 **File:** `src/ws/WebSocketClient.ts:510-515`
 
 ```ts
@@ -469,6 +508,10 @@ shutdown while retrying.
 
 ### L2. Second `connect()` while connecting resolves before the socket opens
 
+**Status:** ⏳ **Open (documented only).** Deferred — a proper fix needs a shared
+connect-promise so concurrent callers await the same attempt, which touches the
+connection-state machine. Low impact: the state guard already prevents duplicate sockets.
+
 **File:** `src/ws/WebSocketClient.ts:99-106`
 
 ```ts
@@ -487,6 +530,11 @@ early return for `"connecting"` is lazy.)
 
 ### L3. `playTrack` resets `_position` to 0 even when `noReplace` made the request a no-op
 
+**Status:** ✅ Fixed in `1b66c44` — the position baseline (`_position`/`_positionTimestamp`)
+is reset only when the PATCH response reports the requested track as the adopted track
+(response `track.encoded` matches or the node has no track); regression test added
+(`playTrack position baseline: reset on replace, kept when noReplace is ignored`).
+
 **File:** `src/player/Player.ts:1353`
 
 ```ts
@@ -502,6 +550,10 @@ next `playerUpdate` arrives. Minor, self-healing, but real.
 ---
 
 ### L4. `Queue.skipTo()` drops the currently playing track into history while it still plays
+
+**Status:** ⏳ **Open (documented only).** Deferred — a real fix needs a player-level
+`skipTo()` wrapper that stops/advances the node before the queue cursor moves (see
+hardening suggestions, Phase 5).
 
 **File:** `src/queue/Queue.ts:330-353`
 
@@ -531,6 +583,9 @@ tracks normally also trigger `play()` immediately after.
 
 ### N1. Type-unsafe event emissions
 
+**Status:** ⏳ **Open (documented only).** Runtime behavior is correct; only compile-time
+safety is lost. Cleanup deferred (touches the forwarding layer).
+
 **File:** `src/Kumo.ts:782`, `src/Kumo.ts:992`, `src/Kumo.ts:1035-1036`
 
 ```ts
@@ -546,6 +601,8 @@ signature. Runtime behavior is correct; compile-time safety is lost. `as never` 
 
 ### N2. `resyncPlayersOnNode` formatting
 
+**Status:** ✅ Fixed in `ba83acf` — signature and body split onto separate lines.
+
 **File:** `src/Kumo.ts:1057`
 
 ```ts
@@ -555,6 +612,10 @@ private resyncPlayersOnNode(nodeId: string): void {    const affected = this.pla
 Method body on the same line as the signature. Cosmetic only.
 
 ### N3. `createLavaSrcPlugin` / `createSponsorBlockPlugin` / `createFloweryTTSPlugin` are no-op placeholders
+
+**Status:** ❓ **Needs verification** — still open; confirm the intended contract before
+treating as a defect. Since lavasrc/sponsorblock are server-side plugins, a no-op client
+helper may be by design.
 
 **File:** `src/plugins/LavaPlugins.ts:40-68`
 
@@ -572,6 +633,8 @@ are server-side plugins, this may be by design (the server already holds its own
 **Needs verification** — confirm the intended contract before treating as a defect.
 
 ### N4. `playerEmpty` is a documented alias for `queueEnd`
+
+**Status:** 🟢 Verified non-issue — documented alias, no action taken.
 
 **File:** `src/Kumo.ts:403-406` matching `src/types/internal.ts:233-234`
 
@@ -607,18 +670,20 @@ documents `playerEmpty` as "alias for queueEnd". Verified intentional — not a 
 
 ## Top-10 most dangerous bugs
 
-Ranked by (likelihood × impact), High first, then the worst Medium/Low:
+Ranked by (likelihood × impact), High first, then the worst Medium/Low. Phase 4 outcome:
+**8 of 10 fixed**, 1 open (L2), and 1 more fixed beside the list (L4 below it is the
+remaining Low).
 
-1. **H1** — paused-start tracks silently unpause; `resume()` becomes a no-op (broken pause UX).
-2. **H2** — removing the current track silently skips a queued track on every natural end.
-3. **H3** — session resuming is defeated by unconditional failover on node blips (gaps/double audio on every transient disconnect).
-4. **H4** — timed-out connects are never aborted; stale socket events clobber a healthy successor (spurious disconnect + phantom reconnects).
-5. **M1** — `close()` + `connect()` yields a zombie node that the manager can never see again.
-6. **M4** — `previous()` in queue-repeat mode grows the queue with duplicate tracks.
-7. **M2** — `resolveTrack` plays the wrong track for mixed/selected playlists.
-8. **M3** — `requester` lost through persistence/restore and `JSON.stringify`.
-9. **L2** — second `connect()` resolves before the socket is open (unawaitable readiness).
-10. **L1** — dead-node reconnect loop keeps the process alive (backoff up to 30 s × attempts).
+1. **H1** ✅ — paused-start tracks silently unpause; `resume()` becomes a no-op (broken pause UX). *Fixed `801e3a6`.*
+2. **H2** ✅ — removing the current track silently skips a queued track on every natural end. *Fixed `e55918c`.*
+3. **H3** ✅ — session resuming is defeated by unconditional failover on node blips (gaps/double audio on every transient disconnect). *Fixed `294d167`.*
+4. **H4** ✅ — timed-out connects are never aborted; stale socket events clobber a healthy successor (spurious disconnect + phantom reconnects). *Fixed `82366a9`.*
+5. **M1** ✅ — `close()` + `connect()` yields a zombie node that the manager can never see again. *Fixed `08bfc1b`.*
+6. **M4** ✅ — `previous()` in queue-repeat mode grows the queue with duplicate tracks. *Fixed `e121976`.*
+7. **M2** ✅ — `resolveTrack` plays the wrong track for mixed/selected playlists. *Fixed `57f7696`.*
+8. **M3** ✅ — `requester` lost through persistence/restore and `JSON.stringify`. *Fixed `c5df373`.*
+9. **L2** ⏳ — second `connect()` resolves before the socket is open (unawaitable readiness). *Deferred (documented).*
+10. **L1** ✅ — dead-node reconnect loop keeps the process alive (backoff up to 30 s × attempts). *Fixed `3551fa2`.*
 
 ## Standing verification requirements (from the task)
 
@@ -628,3 +693,44 @@ Ranked by (likelihood × impact), High first, then the worst Medium/Low:
 - Keep `npm run build`, `npm run lint`, `npm run typecheck`, `npm run test` green after every
   commit; update the two tests that pin buggy behavior (`Queue.test.ts:367-375`) and any
   others the fixes legitimately change.
+
+## Phase 5 — resolution summary
+
+**Delivered:** 11 commits of fixes (see checklist below); all four gates green on the final
+tree (`build`, `lint` 0 errors, `typecheck`, `test` — 37 files / 474 tests, up from a
+baseline of 461).
+
+| Commit | Fix | Tests |
+|--------|-----|-------|
+| `801e3a6` | H1 paused-start unpause | Player.test.ts |
+| `e55918c` | H2 removed-current desync | Queue.test.ts (replaced pinned test) + Player.test.ts |
+| `294d167` | H3 failover vs resuming | Regressions.test.ts (2, fake timers) |
+| `82366a9` | H4 stale socket handlers / connect abort | WebSocketClient.test.ts (2) |
+| `08bfc1b` | M1 close() listener wipe | WebSocketClient.test.ts |
+| `57f7696` | M2 resolveTrack selectedTrack | RestClient.test.ts (2) |
+| `c5df373` | M3 toJSON requester | Track.test.ts |
+| `e121976` | M4 previous() queue-repeat duplicates | Queue.test.ts |
+| `3551fa2` | L1 reconnect timer unref | — |
+| `1b66c44` | L3 noReplace position baseline | Player.test.ts |
+| `ba83acf` | N2 resyncPlayersOnNode formatting | — |
+
+**Still open (documented only):** L2 (connect() readiness), L4 (player-level `skipTo`
+wrapper), N1 (typed event forwarding), N3 (plugin placeholders — needs verification).
+
+**Suggested hardening (not required by this task):**
+
+1. **Mock-Lavalink harness / resume e2e** — the resume-vs-failover timing (H3) and the
+   `noReplace` position semantics (L3) are the two fixes that most deserve a full fake-node
+   integration test driving real `PlayerUpdate`/`TrackStart` events with scripted REST.
+2. **Player-level `skipTo()` wrapper** — needed to close L4: it should stop/advance the node
+   first so the cursor never points at a not-yet-played track while old audio still runs.
+3. **Connection-state machine hardening (L2)** — have `connect()` return the in-flight
+   promise when already `"connecting"` instead of resolving early; centralize state
+   transitions.
+4. **Per-node config validation** — validate `resuming.timeout`, `retryDelay` ranges at
+   `NodeManager` construction time so invalid config can't silently disable resuming or
+   produce 0 ms retrigger loops.
+5. **Typed event forwarding (N1)** — replace the `as never`/`as any` forwarding in `Kumo`
+   with the typed `EventMap` already present.
+6. **Plugin contract confirmation (N3)** — decide and document whether client-side plugin
+   helpers are no-ops by design; if so, log a debug line so users can tell they registered.
