@@ -507,6 +507,28 @@ describe("Player track-end handling and lifecycle", () => {
     expect(trackPlays(node)).toEqual(["encoded-a", "encoded-b", "encoded-c"]);
   });
 
+  it("does not skip a queued track when the playing track is removed", async () => {
+    const player = createLivePlayer();
+    player.queue.enqueue(makeTrack("a")).enqueue(makeTrack("b")).enqueue(makeTrack("c"));
+    await player.play();
+
+    // Remove the currently playing track — node keeps playing "a", but the
+    // queue must not silently re-point at "b"
+    player.queue.remove(0, 1);
+    expect(player.currentTrack?.encoded).toBe("encoded-a");
+    expect(player.queue.tracksList.map((t) => (t as { encoded: string }).encoded)).toEqual([
+      "encoded-b",
+      "encoded-c",
+    ]);
+
+    // When "a" ends naturally, "b" plays next — nothing is skipped
+    node.ws.eventDispatcher.emit("trackEnd", "guild-1", makeTrack("a"), "finished");
+    await flush();
+
+    expect(trackPlays(node)).toEqual(["encoded-a", "encoded-b"]);
+    expect(player.currentTrack?.encoded).toBe("encoded-b");
+  });
+
   it("skip() with nothing playing emits queueEnd and does not throw when autoplay is on", async () => {
     const player = createLivePlayer();
     player.setAutoplay(true);
