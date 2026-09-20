@@ -524,7 +524,13 @@ export class RestClient {
         if (result.data.tracks.length === 0) {
           throw new LoadError(`Playlist is empty for identifier: ${identifier}`);
         }
-        return result.data.tracks[0] as TrackData;
+        // Lavalink picks the start track of a playlist (e.g. "Up Next" mixes)
+        // via info.selectedTrack — falling back to tracks[0] plays the wrong song
+        const selectedIndex = Math.min(
+          Math.max(0, result.data.info?.selectedTrack ?? 0),
+          result.data.tracks.length - 1,
+        );
+        return result.data.tracks[selectedIndex] as TrackData;
       }
       case "empty": {
         throw new LoadError(`No matches found for identifier: ${identifier}`);
