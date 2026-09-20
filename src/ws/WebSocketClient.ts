@@ -63,6 +63,8 @@ export class WebSocketClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private _isAlive = true;
+  /** In-flight connect() attempt, shared with concurrent callers so they all await the same socket open/failure */
+  private connectPromise: Promise<void> | null = null;
 
   public constructor(options: WebSocketClientOptions) {
     this.options = options;
@@ -139,8 +141,15 @@ export class WebSocketClient {
       throw new Error("Cannot connect: WebSocket client is destroyed");
     }
 
-    if (this._state === "connecting" || this._state === "connected") {
+    if (this._state === "connected") {
       return;
+    }
+
+    // An attempt is already in flight — hand concurrent callers the same promise
+    // so they truly wait for the socket to open (and observe any failure)
+    // instead of resolving optimistically while the socket is still connecting.
+    if (this._state === "connecting" && this.connectPromise != null) {
+      return this.connectPromise;
     }
 
     this._state = "connecting";
@@ -247,10 +256,11 @@ export class WebSocketClient {
         }
       };
 
-      const handleError = (err: any) => {
-        if (this.ws !== instance) return; // stale socket — ignore
+      const handleError = (err: unknown) => {
+        if (this.ws !== (instance as unknown as WebSocket)) return; // stale socket — ignore
+        const errObj = (err ?? {}) as ErrorEventLike;
         const error =
-          err instanceof Error ? err : new Error(String(err?.message ?? err ?? "WebSocket error"));
+          err instanceof Error ? err : new Error(String(errObj.message ?? err ?? "WebSocket error"));
         this.events.emit("debug", `WebSocket error on ${host}:${port}: ${error.message}`);
         this.events.emit("nodeError", this.nodeId, error);
         // The ws implementation emits "close" after "error"; rejection happens there
