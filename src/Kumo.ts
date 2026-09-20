@@ -123,7 +123,8 @@ function formatSourcePrefix(source: string): string {
     soundcloudSearch: "scsearch",
     spotifySearch: "spsearch",
   };
-  if (map[lower]) return map[lower];
+  const mapped = map[lower];
+  if (mapped != null) return mapped;
   if (lower.endsWith("search")) return lower;
   return `${source}search`;
 }
@@ -595,7 +596,7 @@ export class YuKumo {
    * @param encodedTrack The encoded track base64 string
    * @param nodeName Optional specific node name to use
    */
-  public async getLyrics(encodedTrack: string, nodeName?: string): Promise<any> {
+  public async getLyrics(encodedTrack: string, nodeName?: string): Promise<unknown> {
     const node = nodeName != null ? this.nodes.get(nodeName) : this.nodes.pick(encodedTrack);
     if (node == null) return null;
     try {
@@ -671,7 +672,11 @@ export class YuKumo {
     const existingVoice = this.voice.getVoiceState(options.guildId);
     if (existingVoice != null) {
       player.setVoiceState(existingVoice);
-      if (existingVoice.token && existingVoice.endpoint && existingVoice.sessionId) {
+      if (
+        existingVoice.token != null &&
+        existingVoice.endpoint != null &&
+        existingVoice.sessionId != null
+      ) {
         await player.sendVoiceUpdate().catch(() => undefined);
       }
     }
@@ -789,7 +794,7 @@ export class YuKumo {
     if (player.voiceChannelId !== data.channelId) {
       const oldChannel = player.voiceChannelId;
       await player.setVoiceChannel(data.channelId);
-      this.events.emit("playerMoved" as any, data.guildId, oldChannel, data.channelId);
+      this.events.emit("playerMoved", data.guildId, oldChannel, data.channelId);
     }
 
     player.updateVoiceState({ sessionId: data.sessionId, channelId: data.channelId });

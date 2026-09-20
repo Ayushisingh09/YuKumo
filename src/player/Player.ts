@@ -160,13 +160,13 @@ export class Player<TTrack extends TrackData = TrackData> {
   public readonly events: EventDispatcher;
   
   /** Custom data map for developers to store persistent session variables */
-  public readonly data: Map<string, any> = new Map();
+  public readonly data: Map<string, unknown> = new Map();
 
   /**
    * Temporary per-player data with optional TTL — `cache.set("vote", true, 60_000)`
    * auto-expires after 60s. Use `data` for permanent values.
    */
-  public readonly cache = new TTLCache<string, any>();
+  public readonly cache = new TTLCache<string, unknown>();
 
   /** Whether autoplay is enabled when queue ends */
   public autoplay: boolean = false;
@@ -590,10 +590,10 @@ export class Player<TTrack extends TrackData = TrackData> {
     const history = this.queue.historyList;
     for (const track of history.slice(Math.max(0, history.length - limit))) {
       const id = (track as TrackData).info?.identifier;
-      if (id) ids.add(id);
+      if (id != null && id.length > 0) ids.add(id);
     }
     const currentId = this.currentTrack?.info?.identifier;
-    if (currentId) ids.add(currentId);
+    if (currentId != null && currentId.length > 0) ids.add(currentId);
     return ids;
   }
 
@@ -627,28 +627,30 @@ export class Player<TTrack extends TrackData = TrackData> {
     const info = lastTrack.info ?? ({} as NonNullable<TTrack["info"]>);
     const source = (info.sourceName ?? "").toLowerCase();
     const identifier = info.identifier;
+    const hasId = identifier != null && identifier.length > 0;
     const exclude = this.recentTrackIdentifiers();
-    if (identifier) exclude.add(identifier);
+    if (hasId) exclude.add(identifier);
 
     const attempts: string[] = [];
     switch (source) {
       case "youtube":
       case "youtubemusic":
-        if (identifier) {
+        if (hasId) {
           attempts.push(`https://www.youtube.com/watch?v=${identifier}&list=RD${identifier}`);
         }
         break;
       case "spotify":
-        if (identifier) attempts.push(`sprec:seed_tracks=${identifier}`);
+        if (hasId) attempts.push(`sprec:seed_tracks=${identifier}`);
         break;
       case "deezer":
-        if (identifier) attempts.push(`dzrec:${identifier}`);
+        if (hasId) attempts.push(`dzrec:${identifier}`);
         break;
       case "yandexmusic":
-        if (identifier) attempts.push(`ymrec:${identifier}`);
+        if (hasId) attempts.push(`ymrec:${identifier}`);
         break;
       case "soundcloud":
-        if (info.uri) attempts.push(`${info.uri.replace(/\/+$/, "")}/recommended`);
+        if (info.uri != null && info.uri.length > 0)
+          attempts.push(`${info.uri.replace(/\/+$/, "")}/recommended`);
         break;
     }
 
@@ -872,9 +874,9 @@ export class Player<TTrack extends TrackData = TrackData> {
    * Fetches lyrics for the current track or a specified track using Lavalink Lyrics plugin.
    * @param encodedTrack Optional encoded track. Defaults to the currently playing track.
    */
-  public async getLyrics(encodedTrack?: string | null): Promise<any> {
+  public async getLyrics(encodedTrack?: string | null): Promise<unknown> {
     const trackToUse = encodedTrack ?? this.queue.currentTrack?.encoded;
-    if (!trackToUse) return null;
+    if (trackToUse == null || trackToUse.length === 0) return null;
     return this.kumo.getLyrics(trackToUse);
   }
 
@@ -1193,12 +1195,17 @@ export class Player<TTrack extends TrackData = TrackData> {
     if (this._destroyed) {
       return Promise.reject(new PlayerError("Player is destroyed", this.guildId));
     }
-    if (this.hasVoiceCredentials || !this.kumo?.events) return Promise.resolve();
+    if (this.hasVoiceCredentials || this.kumo?.events == null) return Promise.resolve();
 
     // Credentials may already be sitting in the global tracker (e.g. player
     // recreated while the bot never left the channel)
     const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
-    if (globalVoice != null && globalVoice.token && globalVoice.endpoint && globalVoice.sessionId) {
+    if (
+      globalVoice != null &&
+      globalVoice.token != null &&
+      globalVoice.endpoint != null &&
+      globalVoice.sessionId != null
+    ) {
       this.setVoiceState(globalVoice);
       return Promise.resolve();
     }
@@ -1669,7 +1676,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public async getNodeLinkLyrics(lang?: string, track?: TTrack): Promise<unknown> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     const encoded = (track ?? this.currentTrack)?.encoded;
-    if (!encoded) return null;
+    if (encoded == null || encoded.length === 0) return null;
     return this._node.rest.loadLyrics(encoded, lang);
   }
 
@@ -1677,7 +1684,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public async getChapters(track?: TTrack): Promise<unknown> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     const encoded = (track ?? this.currentTrack)?.encoded;
-    if (!encoded) return null;
+    if (encoded == null || encoded.length === 0) return null;
     return this._node.rest.loadChapters(encoded);
   }
 
@@ -1685,7 +1692,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public async getTrackMeaning(track?: TTrack): Promise<unknown> {
     if (this._destroyed) throw new PlayerError("Player is destroyed", this.guildId);
     const encoded = (track ?? this.currentTrack)?.encoded;
-    if (!encoded) return null;
+    if (encoded == null || encoded.length === 0) return null;
     return this._node.rest.getMeaning(encoded);
   }
 
@@ -1956,7 +1963,7 @@ export class Player<TTrack extends TrackData = TrackData> {
   public async sendVoiceUpdate(): Promise<void> {
     if (this._destroyed || this._voiceStateSent) return;
     const { token, endpoint, sessionId: voiceSessionId } = this._voiceState;
-    if (!token || !endpoint || !voiceSessionId) return;
+    if (token == null || endpoint == null || voiceSessionId == null) return;
 
     const sessionId = this._node.rest.sessionId;
     if (sessionId == null) return;
@@ -1991,7 +1998,12 @@ export class Player<TTrack extends TrackData = TrackData> {
 
     if (!this.hasVoiceCredentials) {
       const globalVoice = this.kumo?.voice?.getVoiceState(this.guildId);
-      if (globalVoice != null && globalVoice.token && globalVoice.endpoint && globalVoice.sessionId) {
+      if (
+        globalVoice != null &&
+        globalVoice.token != null &&
+        globalVoice.endpoint != null &&
+        globalVoice.sessionId != null
+      ) {
         this.setVoiceState(globalVoice);
       }
     }

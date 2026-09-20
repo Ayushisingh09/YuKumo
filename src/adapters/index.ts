@@ -7,5 +7,7 @@ export { DiscordenoAdapter } from "./DiscordenoAdapter.ts";
 export { DaveyAdapter } from "./DaveyAdapter.ts";
 export type { MinimalDiscordJSClient } from "./DiscordJSAdapter.ts";
 export type { MinimalErisClient } from "./ErisAdapter.ts";
-export type { RawGatewayPacket } from "./RawGatewayAdapter.ts";
+export type { MinimalOceanicClient } from "./OceanicAdapter.ts";
+export type { MinimalSeyfertClient } from "./SeyfertAdapter.ts";
+export type { RawGatewayPacket, LooseGatewayPacket } from "./RawGatewayAdapter.ts";
 export type { DaveyAdapterOptions } from "./DaveyAdapter.ts";

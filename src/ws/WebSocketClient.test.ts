@@ -94,6 +94,28 @@ describe("WebSocketClient", () => {
       expect(globalThis.WebSocket).toHaveBeenCalledTimes(1);
     });
 
+    it("hands concurrent connect() callers the same in-flight promise (resolves only on open)", async () => {
+      const client = createClient();
+      const first = client.connect();
+      const second = client.connect();
+
+      // Both callers must be waiting on the same attempt — not resolved early
+      let firstResolved = false;
+      let secondResolved = false;
+      void first.then(() => (firstResolved = true));
+      void second.then(() => (secondResolved = true));
+      await Promise.resolve();
+      expect(firstResolved).toBe(false);
+      expect(secondResolved).toBe(false);
+      expect(globalThis.WebSocket).toHaveBeenCalledTimes(1);
+
+      mockWs.onopen?.(new Event("open"));
+      await Promise.all([first, second]);
+      expect(firstResolved).toBe(true);
+      expect(secondResolved).toBe(true);
+      expect(client.state).toBe("connected");
+    });
+
     it("should not connect if already connected", async () => {
       const client = createClient();
       const connectPromise = client.connect();

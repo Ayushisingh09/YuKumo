@@ -156,7 +156,7 @@ export class RestClient {
   private getCached<T>(key: string): T | null {
     if (!this.cacheEnabled) return null;
     const entry = this.responseCache.get(key);
-    if (!entry) return null;
+    if (entry == null) return null;
     if (Date.now() > entry.expiresAt) {
       this.responseCache.delete(key);
       return null;
@@ -168,7 +168,7 @@ export class RestClient {
     if (!this.cacheEnabled) return;
     if (this.responseCache.size >= this.cacheMaxEntries) {
       const firstKey = this.responseCache.keys().next().value;
-      if (firstKey) this.responseCache.delete(firstKey);
+      if (firstKey != null) this.responseCache.delete(firstKey);
     }
     this.responseCache.set(key, {
       data,
@@ -219,7 +219,7 @@ export class RestClient {
       if (response.status === 429) {
         const retryAfterHeader = response.headers?.get?.("Retry-After");
         let waitMs = 1000;
-        if (retryAfterHeader) {
+        if (retryAfterHeader != null && retryAfterHeader.length > 0) {
           const parsedSeconds = parseInt(retryAfterHeader, 10);
           if (!isNaN(parsedSeconds)) {
             waitMs = parsedSeconds * 1000;
@@ -699,7 +699,7 @@ export class RestClient {
   public async loadLyrics(encodedTrack: string, lang?: string): Promise<unknown> {
     const key = `loadlyrics:${encodedTrack}:${lang ?? ""}`;
     const cached = this.getCached<unknown>(key);
-    if (cached) return cached;
+    if (cached != null) return cached;
 
     const params: Record<string, string> = { encodedTrack };
     if (lang != null) params.lang = lang;
@@ -766,14 +766,14 @@ export class RestClient {
    * Note: This requires the Lavalink Lyrics plugin to be installed on the node.
    * @param encodedTrack The encoded track base64 string
    */
-  public async getLyrics(encodedTrack: string): Promise<any> {
+  public async getLyrics(encodedTrack: string): Promise<unknown> {
     const key = `lyrics:${encodedTrack}`;
-    const cached = this.getCached<any>(key);
-    if (cached) return cached;
+    const cached = this.getCached<unknown>(key);
+    if (cached != null) return cached;
 
     const params: Record<string, string> = { track: encodedTrack };
     // The lyrics plugin typically binds to /v4/lyrics or /v4/loadlyrics
-    const res = await this.request<any>("GET", "/lyrics", undefined, params);
+    const res = await this.request<unknown>("GET", "/lyrics", undefined, params);
     this.setCached(key, res);
     return res;
   }

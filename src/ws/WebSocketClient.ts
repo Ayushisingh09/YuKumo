@@ -190,7 +190,7 @@ export class WebSocketClient {
     const instance = new WSClass(url, { headers });
     this.ws = instance as unknown as WebSocket;
 
-    return new Promise<void>((resolve, reject) => {
+    const attempt = new Promise<void>((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(() => {
         if (!settled) {
@@ -278,11 +278,22 @@ export class WebSocketClient {
         instance.on("error", (err: unknown) => handleError(err));
       } else {
         instance.onopen = handleOpen;
-        instance.onmessage = handleMsg;
-        instance.onclose = handleClose;
+        instance.onmessage = ((event: MessageEventLike) => handleMsg(event)) as (
+          ...args: unknown[]
+        ) => void;
+        instance.onclose = ((event: CloseEventLike) => handleClose(event)) as (
+          ...args: unknown[]
+        ) => void;
         instance.onerror = handleError;
       }
     });
+
+    // Share the in-flight attempt so concurrent connect() callers await the same
+    // socket open/failure instead of resolving early; clear it once it settles.
+    this.connectPromise = attempt.finally(() => {
+      if (this.connectPromise === attempt) this.connectPromise = null;
+    });
+    return this.connectPromise;
   }
 
   private handleMessage(data: string): void {
