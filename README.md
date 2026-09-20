@@ -73,6 +73,7 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - High-level presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `setSlowedReverb()`, `set3DAudio()`, `setPitchShift()`, `setVoiceIsolation()`
 - One setter per Lavalink filter band: `setEqualizer()`, `setKaraoke()`, `setTimescale()`, `setTremolo()`, `setVibrato()`, `setRotation()`, `setDistortion()`, `setChannelMix()`, `setLowPass()`, `setVolumeFilter()`
 - Global custom named filter preset registry (`FilterChain.registerPreset()` / `applyPreset()`) and `setAudioOutput("mono" | "stereo" | "left" | "right")` routing
+- Server-side filter-plugin passthrough via `setPluginFilter(name, settings)` — works with LavaDSPX and any Lavalink filter plugin (Lavalink v4 `pluginFilters`)
 
 **Resilience & Protection**
 - WebSocket heartbeat with pong-timeout detection — half-open dead node connections are terminated and auto-reconnected
@@ -307,14 +308,21 @@ client.login(process.env.DISCORD_TOKEN);
 | **SponsorBlock** | Automatic segment filtering (intros, sponsors, outros) |
 | **FloweryTTS** | Text-to-speech track generation |
 
+LavaSrc, SponsorBlock, and FloweryTTS run **on the Lavalink node** (configured in its `application.yml`). The helpers below declare which of them your bot expects, so they show up in `manager.plugins`:
+
 ```js
-const { YuKumo, LavaSrcPlugin, SponsorBlockPlugin } = require("yukumo");
+const { YuKumo, createLavaSrcPlugin, createSponsorBlockPlugin } = require("yukumo");
 
 const yukumo = new YuKumo({
   nodes: [{ host: "localhost", port: 2333, password: "youshallnotpass" }],
-  plugins: [new LavaSrcPlugin(), new SponsorBlockPlugin()],
+  plugins: [
+    createLavaSrcPlugin({ spotify: { clientId: "…", clientSecret: "…" } }),
+    createSponsorBlockPlugin({ categories: ["sponsor", "intro", "outro"] }),
+  ],
 });
 ```
+
+Runtime SponsorBlock skip categories and youtube-source poToken/OAuth are set per-node via `player.setSponsorBlock()` and `node.rest.setYouTubePoToken()` / `setYouTubeRefreshToken()`.
 
 ---
 
