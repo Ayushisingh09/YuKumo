@@ -61,9 +61,9 @@ Built for production: multi-node load balancing, automatic failover, distributed
 - Built-in REST response caching with TTL, plus HTTP 429 `Retry-After` parsing and exponential backoff
 
 **Queueing & Player Controls**
-- Repeat modes (`off`, `track`, `queue`) — including Magmastream/erela-style `setTrackRepeat()` / `setQueueRepeat()` and `trackRepeat` / `queueRepeat` booleans
+- Repeat modes (`off`, `track`, `queue`) — including `setTrackRepeat()` / `setQueueRepeat()` and `trackRepeat` / `queueRepeat` booleans
 - Play history, shuffle, and priority track injection via `priorityEnqueue`
-- Advanced queue helpers: `swap()`, `skipTo()`, `removeRange()`, `clearExceptCurrent()`, and Poru-style `player.get(start, end)` queue slicing
+- Advanced queue helpers: `swap()`, `skipTo()`, `removeRange()`, `clearExceptCurrent()`, and `player.get(start, end)` queue slicing
 - Smart Autoplay recommendation engine (`setAutoplay()`) with `autoplayTrackAdded` event notifications
 - Queue state serialization (`export()` / `import()`) and pagination (`getPage`)
 - State getters in every convention: `status`, `isPlaying`, `isPaused`, `isConnected`, `isDestroyed`, `isAutoplay`, `voiceId`/`textId`, `currentTrack`
@@ -71,7 +71,7 @@ Built for production: multi-node load balancing, automatic failover, distributed
 **Audio & Filters**
 - Full DSP filter chain: Equalizer, Karaoke, Timescale, Tremolo, Vibrato, Rotation, Distortion, ChannelMix, LowPass, plus a raw `FiltersObject` passthrough in `setFilters()`
 - High-level presets: `setBassBoost()`, `setNightcore()`, `setVaporwave()`, `setSlowedReverb()`, `set3DAudio()`, `setPitchShift()`, `setVoiceIsolation()`
-- Per-filter setters in Shoukaku/lavalink-client style: `setEqualizer()`, `setKaraoke()`, `setTimescale()`, `setTremolo()`, `setVibrato()`, `setRotation()`, `setDistortion()`, `setChannelMix()`, `setLowPass()`, `setVolumeFilter()`
+- One setter per Lavalink filter band: `setEqualizer()`, `setKaraoke()`, `setTimescale()`, `setTremolo()`, `setVibrato()`, `setRotation()`, `setDistortion()`, `setChannelMix()`, `setLowPass()`, `setVolumeFilter()`
 - Global custom named filter preset registry (`FilterChain.registerPreset()` / `applyPreset()`) and `setAudioOutput("mono" | "stereo" | "left" | "right")` routing
 
 **Resilience & Protection**

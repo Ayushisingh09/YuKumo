@@ -27,7 +27,7 @@ export type BassBoostLevel = "low" | "medium" | "high" | "extreme";
 
 export type AudioOutput = "mono" | "stereo" | "left" | "right";
 
-/** ChannelMix presets for routing audio output — mirrors lavalink-client's audioOutputsData */
+/** ChannelMix presets for routing audio output (mono, stereo, left/right-only, swap). */
 export const AudioOutputs: Record<
   AudioOutput,
   { leftToLeft: number; leftToRight: number; rightToLeft: number; rightToRight: number }

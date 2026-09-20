@@ -97,7 +97,7 @@ export class Queue<T> {
     return this.tracks;
   }
 
-  /** Alias for currentTrack — matches Erela.js/Poru convention */
+  /** Alias for {@link currentTrack}. */
   public get current(): T | null {
     return this.currentTrack;
   }

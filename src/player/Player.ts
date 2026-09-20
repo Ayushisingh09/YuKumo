@@ -392,7 +392,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this._textChannelId;
   }
 
-  /** Alias for voiceChannelId — matches Shoukaku/Erela convention */
+  /** Short alias for {@link voiceChannelId}. */
   public get voiceId(): string {
     return this._voiceChannelId;
   }
@@ -402,7 +402,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     this._voiceChannelId = id;
   }
 
-  /** Alias for textChannelId — matches Shoukaku/Erela convention */
+  /** Short alias for {@link textChannelId}. */
   public get textId(): string | null {
     return this._textChannelId;
   }
@@ -796,8 +796,7 @@ export class Player<TTrack extends TrackData = TrackData> {
 
   /**
    * Returns a slice of the queue. Without an end index it returns everything
-   * from `start` (including the currently playing track). Mirrors Poru's
-   * `player.get(index, end)`.
+   * from `start` (including the currently playing track).
    */
   public get(start: number = 0, end?: number): TTrack[] {
     const tracks = this.queue.tracksList;
@@ -816,7 +815,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this;
   }
 
-  /** Whether single-track repeat is on — Magmastream/erela.js style boolean */
+  /** Whether single-track repeat is on. */
   public get trackRepeat(): boolean {
     return this.queue.repeatMode === "track";
   }
@@ -826,7 +825,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     this.setLoop(enabled ? "track" : this.queue.repeatMode === "queue" ? "queue" : "none");
   }
 
-  /** Whether whole-queue repeat is on — Magmastream/erela.js style boolean */
+  /** Whether whole-queue repeat is on. */
   public get queueRepeat(): boolean {
     return this.queue.repeatMode === "queue";
   }
@@ -836,19 +835,19 @@ export class Player<TTrack extends TrackData = TrackData> {
     this.setLoop(enabled ? "queue" : this.queue.repeatMode === "track" ? "track" : "none");
   }
 
-  /** Turns single-track repeat on/off — Magmastream/erela.js convention */
+  /** Turns single-track repeat on/off. */
   public setTrackRepeat(enabled: boolean = true): this {
     this.trackRepeat = enabled;
     return this;
   }
 
-  /** Turns whole-queue repeat on/off — Magmastream/erela.js convention */
+  /** Turns whole-queue repeat on/off. */
   public setQueueRepeat(enabled: boolean = true): this {
     this.queueRepeat = enabled;
     return this;
   }
 
-  /** Unified pause/resume toggle — matches Erela.js/Magmastream convention */
+  /** Unified pause/resume toggle: `setPaused(true)` pauses, `setPaused(false)` resumes. */
   public async setPaused(state: boolean): Promise<void> {
     return state ? this.pause() : this.resume();
   }
@@ -1524,7 +1523,7 @@ export class Player<TTrack extends TrackData = TrackData> {
     await this.setFilters();
   }
 
-  // ─── Individual filter setters (Shoukaku / lavalink-client style) ────────
+  // ─── Individual filter setters (one call per Lavalink filter band) ───────
 
   /** Replaces the equalizer bands filter and syncs it to the node */
   public async setEqualizer(bands: EqualizerBand[] = []): Promise<void> {
@@ -2141,27 +2140,27 @@ export class Player<TTrack extends TrackData = TrackData> {
     return this._destroyed;
   }
 
-  /** Alias for `status === "playing" && !paused` — Poru/Riffy convention */
+  /** True when a track is actively playing (`status === "playing"` and not paused). */
   public get isPlaying(): boolean {
     return this._status === "playing" && !this._paused;
   }
 
-  /** Alias for `paused` — Poru/Riffy convention */
+  /** Alias for `paused`. */
   public get isPaused(): boolean {
     return this._paused;
   }
 
-  /** Alias for `connected` — Poru/Riffy convention */
+  /** Alias for `connected`. */
   public get isConnected(): boolean {
     return this.connected;
   }
 
-  /** Alias for `destroyed` — Poru/Riffy convention */
+  /** Alias for `destroyed`. */
   public get isDestroyed(): boolean {
     return this._destroyed;
   }
 
-  /** Alias for `getAutoplay()` — Poru/Riffy convention */
+  /** Alias for `getAutoplay()`. */
   public get isAutoplay(): boolean {
     return this.autoplay;
   }

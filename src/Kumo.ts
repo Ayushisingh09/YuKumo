@@ -64,9 +64,9 @@ function loadResultToSearchResult(result: LoadResult): SearchResult {
 }
 
 /**
- * Stamps the search requester onto each track's userData (Lavalink v4
- * convention used by lavalink-client/Poru). Returns a new result so the
- * shared search cache is never polluted with a stale requester.
+ * Stamps the search requester onto each track's userData (the Lavalink v4
+ * `userData` convention). Returns a new result so the shared search cache is
+ * never polluted with a stale requester.
  */
 function attachRequester(result: SearchResult, requester: unknown): SearchResult {
   if (requester === undefined || result.tracks.length === 0) return result;
